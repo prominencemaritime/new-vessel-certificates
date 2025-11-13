@@ -5,7 +5,12 @@
 
 ## Summary
 
-**Automated notifications for events, defaulting to "Hot Work" Permit Events**
+**Automated notifications for Vessel document updates**
+
+Once a day scan program for new vesseldocs and create email that this doc is updated
+
+
+## Haven't updated what follows:
 
 Monitors ORCA CORE DB for specific events (such as "hot work" permits) (configurable in `.env`) and automatically sends notifications to designated recipients (specified in `.env`). The notifications are currently via email (specified in `.env`, but the groundwork for Teams chat notifications is also in place). The alerts system runs continuously with configurable intervals (denoted by `SCHEDULE_FREQUENCY` in `.env`) and prevents duplicate notifications provided a certain number of days (denoted by `REMINDER_FREQUENCY_DAYS` in `.env`) has not passed.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-EVENTS ALERTS SYSTEM
+ALERTS SYSTEM
 --------------------
 Developed for Prominence Maritime & Seatraders
 
@@ -56,7 +56,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 DATA_DIR.mkdir(exist_ok=True)
 
 # Sent events tracking file
-SENT_EVENTS_FILE = DATA_DIR / 'sent_events.json'
+SENT_EVENTS_FILE = DATA_DIR / 'sent_alerts.json'
 
 # ---------------------------------------
 # Configuration from .env
@@ -67,8 +67,12 @@ SMTP_USER = config('SMTP_USER')
 SMTP_PASS = config('SMTP_PASS')
 
 INTERNAL_RECIPIENTS = [s.strip() for s in config('INTERNAL_RECIPIENTS', '').split(',') if s.strip()]
-PROMINENCE_EMAIL_RECIPIENTS = [s.strip() for s in config('PROMINENCE_EMAIL_RECIPIENTS', '').split(',') if s.strip()]
-SEATRADERS_EMAIL_RECIPIENTS = [s.strip() for s in config('SEATRADERS_EMAIL_RECIPIENTS', '').split(',') if s.strip()]
+
+PROMINENCE_EMAIL_RECIPIENTS = ### generate vsl.prominencemaritime.com dynamically from query df 
+PROMINENCE_EMAIL_CC_RECIPIENTS = [s.strip() for s in config('PROMINENCE_EMAIL_CC_RECIPIENTS', '').split(',') if s.strip()]
+
+SEATRADERS_EMAIL_RECIPIENTS = ### generate vsl.prominencemaritime.com dynamically from query df
+SEATRADERS_EMAIL_CC_RECIPIENTS = [s.strip() for s in config('SEATRADERS_EMAIL_CC_RECIPIENTS', '').split(',') if s.strip()]
 
 ENABLE_SPECIAL_TEAMS_EMAIL_ALERT = config('ENABLE_SPECIAL_TEAMS_EMAIL_ALERT', default=False, cast=bool)
 SPECIAL_TEAMS_EMAIL = config('SPECIAL_TEAMS_EMAIL', '').strip()
@@ -82,9 +86,9 @@ COMPANY_LOGO = MEDIA_DIR / config('COMPANY_LOGO', default='')
 ST_COMPANY_LOGO = MEDIA_DIR / config('ST_COMPANY_LOGO', default='')
 
 # CRITICAL FIX #2: Configurable events base URL instead of hardcoded
-EVENTS_BASE_URL = config('EVENTS_BASE_URL', default='https://prominence.orca.tools/events')
+BASE_URL = config('BASE_URL', default='https://prominence.orca.tools/')
 
-LOG_FILE = LOGS_DIR / config('LOG_FILE', default='events_alerts.log')
+LOG_FILE = LOGS_DIR / config('LOG_FILE', default='alerts.log')
 LOG_MAX_BYTES = int(config('LOG_MAX_BYTES', default=10_485_760))  # 10MB
 LOG_BACKUP_COUNT = int(config('LOG_BACKUP_COUNT', default=5))
 
@@ -118,7 +122,7 @@ for key, value in required_configs.items():
 # ---------------------------------------
 # Logging Setup
 # ---------------------------------------
-logger = logging.getLogger('events_alerts')
+logger = logging.getLogger('alerts')
 logger.setLevel(logging.INFO)
 handler = RotatingFileHandler(LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT)
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
@@ -528,7 +532,7 @@ Found {len(df)} event(s) matching criteria.
         text += f"\n{idx + 1}."
         # Add link if ID is available (using configurable base URL)
         if 'id' in df.columns:
-            event_url = f"{EVENTS_BASE_URL}/{row['id']}"
+            event_url = f"{BASE_URL}/vessels/{row['id']}/documents" ### ensure row['id'] = v.id
             text += f"\n   Link: {event_url}"
         for col in df.columns:
             text += f"\n   {col}: {row[col]}"
@@ -669,7 +673,7 @@ def make_html(df, run_time, df_type_and_status=pd.DataFrame(), has_company_logo=
     <div class="header">
         <div>{logos_html}</div>
         <div style="text-align:right;">
-            <h1>{event_name} Alerts</h1>
+            <h1>Vessel Documents</h1>
             <p>{run_time.strftime('%A, %d %B %Y %H:%M %Z')}</p>
         </div>
     </div>
@@ -679,15 +683,15 @@ def make_html(df, run_time, df_type_and_status=pd.DataFrame(), has_company_logo=
     if df.empty:
         html += """
         <p style="margin-top:25px; font-size:15px;">
-            <strong>No events found for the current query.</strong>
+            <strong>No documents found for the current query.</strong>
         </p>
         """
     else:
         html += f"""
         <div class="metadata">
             <strong>Report Generated:</strong> {run_time.strftime('%A, %B %d, %Y at %H:%M %Z')}<br>
-            <strong>Query Criteria:</strong> Type: {type_name}, Status: {status_name}, Lookback: {EVENT_LOOKBACK_DAYS} day{'' if EVENT_LOOKBACK_DAYS == 1 else 's'}<br>
-            <strong>Frequency:</strong> {duration(SCHEDULE_FREQUENCY)}<br>
+            <strong>Query Criteria:</strong> Lookback: {EVENT_LOOKBACK_DAYS} day{'' if EVENT_LOOKBACK_DAYS == 1 else 's'}<br>
+            <strong>Schedule Frequency:</strong> {duration(SCHEDULE_FREQUENCY)}<br>
             <strong>Results Found:</strong> <span class="count-badge">{len(df)}</span>
         </div>
         <table>
@@ -703,7 +707,7 @@ def make_html(df, run_time, df_type_and_status=pd.DataFrame(), has_company_logo=
             for col in df.columns:
                 if col == 'event_name' and 'id' in df.columns:
                     # Make event_name a clickable link (using configurable base URL)
-                    event_url = f"{EVENTS_BASE_URL}/{row['id']}"
+                    event_url = f"{BASE_URL}/{row['id']}"
                     html += f"""<td>
                         <strong>
                             <a href="{event_url}" 
@@ -941,9 +945,9 @@ def main():
             event_ids_prominence = []
             event_ids_seatraders = []
 
-            ##########################
-            ####### PROMINENCE #######
-            ##########################
+            #========================#
+            #====== PROMINENCE ======#
+            #========================#
             if not df_prominence.empty:
                 logger.info('Generating PROMINENCE email content')
                 subject_prominence = make_subject(len(df_prominence))
@@ -953,9 +957,9 @@ def main():
             else:
                 logger.info("Skipping PROMINENCE email generation - no events")
 
-            ##########################
-            ####### SEATRADERS #######
-            ##########################
+            #========================#
+            #====== SEATRADERS ======#
+            #========================#
             if not df_seatraders.empty:
                 logger.info('Generating SEATRADERS email content')
                 subject_seatraders = make_subject(len(df_seatraders))

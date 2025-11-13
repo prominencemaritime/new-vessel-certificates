@@ -1,14 +1,21 @@
-select 
-    t2.name as VESSEL,
-    t2.build_date as DELIVERY_DATE,
-    max(case when t3.id = '793' then t1.expiration_date end) as Bottom_Survey_Afloat_UWILD,
-    max(case when t3.id = '784' then t1.expiration_date end) as Bottom_Survey_Dry_Dock,
-    max(case when t3.id = '733' then t1.expiration_date end) as Hull_Renewal
-from vessel_documents t1
-inner join vessels t2
-    on t2.id = t1.vessel_id
-inner join vessel_document_types t3
-    on t3.id = t1.vessel_document_type_id
-where t3.id in ('793','784','733')
-group by t2.name, t2.build_date
-order by t2.name;
+SELECT 
+	v.name AS vessel,
+	v.email AS vsl_email,
+	vdt.name AS document_name,
+	vdc.name AS document_category,
+	vd.updated_at,
+	vd.expiration_date,
+	vd.comments
+FROM vessel_documents vd
+LEFT JOIN parties p1
+	on p1.id = vd.created_by_id
+LEFT JOIN parties p2
+	ON p2.id = vd.updated_by_id
+LEFT JOIN vessel_document_types vdt
+	ON vdt.id = vd.vessel_document_type_id
+LEFT JOIN vessels v
+	ON v.id = vd.vessel_id
+LEFT JOIN vessel_document_categories vdc
+	ON vdc.id = vdt.vessel_document_category_id
+WHERE 
+	v.active = 'true';
