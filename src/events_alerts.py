@@ -734,11 +734,22 @@ def make_html(df, run_time, df_type_and_status=pd.DataFrame(), has_company_logo=
 # ---------------------------------------
 # Email Sending Function
 # ---------------------------------------
-def send_email(subject: str, plain_text: str, html_content: str, recipients: List[str]) -> None:
-    """Send email with both plain text and HTML versions, and embedded logo"""
+def send_email(subject: str, plain_text: str, html_content: str, recipients: List[str], cc_recipients: Optional[List[str]] = None) -> None:
+    """Send email with both plain text and HTML versions, and embedded logo
+   
+   Args:
+       subject: Email subject line
+       plain_text: Plain text version of email body
+       html_content: HTML version of email body
+       recipients: List of primary recipient email addresses
+       cc_recipients: Optional list of CC recipient email addresses
+   """
     if not recipients:
         logger.warning("No recipients configured. Skipping email send.")
         return
+
+    if cc_recipients is None:
+        cc_recipients = []
 
     # Create multipart message
     from email.mime.multipart import MIMEMultipart
@@ -749,6 +760,7 @@ def send_email(subject: str, plain_text: str, html_content: str, recipients: Lis
     msg['Subject'] = subject
     msg['From'] = SMTP_USER
     msg['To'] = ', '.join(recipients)
+    msg['Cc'] = ', '.join(cc_recipients)
 
     # Create alternative part for text and HTML
     msg_alternative = MIMEMultipart('alternative')
@@ -796,7 +808,9 @@ def send_email(subject: str, plain_text: str, html_content: str, recipients: Lis
                 smtp.login(SMTP_USER, SMTP_PASS)
                 smtp.send_message(msg)
 
-        logger.info(f"[OK] Email sent successfully to {len(recipients)} recipient{'' if len(recipients) == 1 else 's'}: {', '.join(recipients)}")
+        total_recipients = len(recipients) + len(cc_recipients)
+        cc_info = f" (including {len(cc_recipients)} CC)" if cc_recipients else ""
+        logger.info(f"[OK] Email sent successfully to {total_recipients} recipient{'' if total_recipients == 1 else 's'}{cc_info}: To: {', '.join(recipients)}{f' | CC: {', '.join(cc_recipients)}' if cc_recipients else ''}")
     except Exception as e:
         logger.exception(f"[EXC] Failed to send email: {e}")
         raise
