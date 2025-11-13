@@ -1,4 +1,5 @@
 SELECT 
+    v.id,
 	v.name AS vessel,
 	v.email AS vsl_email,
 	vdt.name AS document_name,

@@ -95,9 +95,9 @@ LOG_BACKUP_COUNT = int(config('LOG_BACKUP_COUNT', default=5))
 # Query configuration (can be moved to .env if needed)
 EVENT_TYPE_ID = int(config('EVENT_TYPE_ID', default=18))    # 18 -> label = permits
 EVENT_STATUS_ID = int(config('EVENT_STATUS_ID', default=3))       # 3 -> progress = for-review
-EVENT_NAME_FILTER = config('EVENT_NAME_FILTER', default='hot')
-EVENT_EXCLUDE = config('EVENT_EXCLUDE', default='vessel')
-EVENT_LOOKBACK_DAYS = int(config('EVENT_LOOKBACK_DAYS', default=17))
+NAME_FILTER_INCLUDE = config('NAME_FILTER_INCLUDE', default='hot')
+NAME_FILTER_EXCLUDE = config('NAME_FILTER_EXCLUDE', default='vessel')
+LOOKBACK_DAYS = int(config('LOOKBACK_DAYS', default=17))
 
 # Automation Scheduler Frequency (hours)
 SCHEDULE_FREQUENCY = float(config('SCHEDULE_FREQUENCY', default=1))
@@ -439,7 +439,7 @@ def send_teams_message(df, run_time):
         if df.empty:
             teams_message.title(f"AlertDev | No Events Found")
             teams_message.color("FFC107")  # Yellow/warning color
-            teams_message.text("No events matching criteria were found in the last {} days.".format(EVENT_LOOKBACK_DAYS))
+            teams_message.text("No events matching criteria were found in the last {} days.".format(LOOKBACK_DAYS))
         else:
             teams_message.title(f"AlertDev | {len(df)} Permit Event{'s' if len(df) != 1 else ''} Found")
             teams_message.color("2EA9DE")  # Light blue brand color
@@ -449,7 +449,7 @@ def send_teams_message(df, run_time):
             summary_section.activityTitle("Report Summary")
             summary_section.activitySubtitle(run_time.strftime('%A, %B %d, %Y at %H:%M %Z'))
             summary_section.addFact("Type", "Permit")
-            summary_section.addFact("Period", f"Last {EVENT_LOOKBACK_DAYS} days")
+            summary_section.addFact("Period", f"Last {LOOKBACK_DAYS} days")
             summary_section.addFact("Frequency", f"{duration(SCHEDULE_FREQUENCY)}")
             summary_section.addFact("Results", f"**{len(df)}** event{'s' if len(df) != 1 else ''}")
             teams_message.addSection(summary_section)
@@ -690,7 +690,7 @@ def make_html(df, run_time, df_type_and_status=pd.DataFrame(), has_company_logo=
         html += f"""
         <div class="metadata">
             <strong>Report Generated:</strong> {run_time.strftime('%A, %B %d, %Y at %H:%M %Z')}<br>
-            <strong>Query Criteria:</strong> Lookback: {EVENT_LOOKBACK_DAYS} day{'' if EVENT_LOOKBACK_DAYS == 1 else 's'}<br>
+            <strong>Query Criteria:</strong> Lookback: {LOOKBACK_DAYS} day{'' if LOOKBACK_DAYS == 1 else 's'}<br>
             <strong>Schedule Frequency:</strong> {duration(SCHEDULE_FREQUENCY)}<br>
             <strong>Results Found:</strong> <span class="count-badge">{len(df)}</span>
         </div>
@@ -846,7 +846,7 @@ def main():
 
             # Execute Admin Query
             logger.info(f"--> CONSTRUCTING DATAFRAME:")
-            logger.info(f"Query parameters: id={EVENT_TYPE_ID}, status={EVENT_STATUS_ID}, include='%{EVENT_NAME_FILTER}%', exclude='%{EVENT_EXCLUDE}%', lookback={EVENT_LOOKBACK_DAYS}")
+            logger.info(f"Query parameters: id={EVENT_TYPE_ID}, status={EVENT_STATUS_ID}, include='%{NAME_FILTER_INCLUDE}%', exclude='%{NAME_FILTER_EXCLUDE}%', lookback={LOOKBACK_DAYS}")
             
             df = pd.read_sql_query(
                 query, 
@@ -854,9 +854,9 @@ def main():
                 params={
                     'type_id': EVENT_TYPE_ID,
                     'status_id': EVENT_STATUS_ID,
-                    'name_filter': f'%{EVENT_NAME_FILTER}%',
-                    'name_excluded': f'%{EVENT_EXCLUDE}%',
-                    'lookback_days': EVENT_LOOKBACK_DAYS
+                    'name_filter': f'%{NAME_FILTER_INCLUDE}%',
+                    'name_excluded': f'%{NAME_FILTER_EXCLUDE}%',
+                    'lookback_days': LOOKBACK_DAYS
                 }
             )
             logger.info(f"[OK] Construction Successful: found {len(df)} event{'s' if len(df)>1 else ''}.")
