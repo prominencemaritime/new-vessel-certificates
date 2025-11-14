@@ -40,11 +40,11 @@ ENV PYTHONUNBUFFERED=1
 # Switch to non-root user
 USER appuser
 
-# Run with scheduling enabled by default
-CMD ["python", "-m", "src.alerts"]
+# Run with scheduling enabled by default using new main.py entry point
+CMD ["python", "-m", "src.main"]
 
 # Healthcheck to monitor container
 HEALTHCHECK --interval=1h --timeout=10s --start-period=30s --retries=3 \
     CMD test -f /app/logs/alerts.log && \
-        MINUTES=$(python3 -c "print(int(${SCHEDULE_FREQUENCY:-1} * 60 + 10))") && \
+        MINUTES=$(python3 -c "import os; print(int(float(os.getenv('SCHEDULE_FREQUENCY_HOURS', '1')) * 60 + 10))") && \
         test $(find /app/logs/alerts.log -mmin -${MINUTES} | wc -l) -eq 1 || exit 1

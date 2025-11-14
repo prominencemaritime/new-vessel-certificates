@@ -1,7 +1,8 @@
 SELECT 
-    v.id,
+	v.id AS vessel_id,
 	v.name AS vessel,
 	v.email AS vsl_email,
+	vdt.id AS document_id,
 	vdt.name AS document_name,
 	vdc.name AS document_category,
 	vd.updated_at,

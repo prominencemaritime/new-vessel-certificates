@@ -1,0 +1,209 @@
+#src/main.py
+"""
+Main entry point for the modular alert system.
+
+This replaces the old alerts.py with a flexible, modular architecture
+that supports multiple alert types.
+
+Usage:
+    python -m src.main                    # Run continuously with scheduling
+    python -m src.main --run-once         # Run once and exit
+    python -m src.main --dry-run          # Test mode (no emails sent)
+"""
+import sys
+import logging
+from logging.handlers import RotatingFileHandler
+import argparse
+from pathlib import Path
+
+# Import core components
+from src.core.config import AlertConfig
+from src.core.tracking import EventTracker
+from src.core.scheduler import AlertScheduler
+
+# Import notification handlers
+from src.notifications.email_sender import EmailSender
+from src.notifications.teams_sender import TeamsSender
+
+# Import formatters
+from src.formatters.html_formatter import HTMLFormatter
+from src.formatters.text_formatter import TextFormatter
+
+# Import alert implementations
+from src.alerts.vessel_documents_alert import VesselDocumentsAlert
+
+
+def setup_logging(config: AlertConfig) -> logging.Logger:
+    """
+    Configure logging for the application.
+    
+    Args:
+        config: AlertConfig instance
+        
+    Returns:
+        Configured root logger
+    """
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        config.log_file,
+        maxBytes=config.log_max_bytes,
+        backupCount=config.log_backup_count
+    )
+    file_formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    )
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+    
+    # Console handler for real-time monitoring
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s'
+    )
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+
+def initialize_components(config: AlertConfig) -> AlertConfig:
+    """
+    Initialise and inject runtime components into config.
+    
+    Args:
+        config: AlertConfig instance
+        
+    Returns:
+        Updated config with injected components
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Initialise event tracker
+    config.tracker = EventTracker(
+        tracking_file=config.sent_events_file,
+        reminder_frequency_days=config.reminder_frequency_days,
+        timezone=config.timezone
+    )
+    logger.info(f"[OK] Event tracker initialised")
+    
+    # Initialise email sender
+    config.email_sender = EmailSender(
+        smtp_host=config.smtp_host,
+        smtp_port=config.smtp_port,
+        smtp_user=config.smtp_user,
+        smtp_pass=config.smtp_pass,
+        company_logos=config.company_logos,
+        dry_run=config.dry_run
+    )
+    if config.dry_run:
+        logger.info(f"[OK] Email sender initialised (DRY-RUN MODE - will not send emails)")
+    else:
+        logger.info(f"[OK] Email sender initialised")
+    
+    # Initialize formatters
+    config.html_formatter = HTMLFormatter()
+    config.text_formatter = TextFormatter()
+    logger.info(f"[OK] Formatters initialized")
+    
+    return config
+
+
+def register_alerts(scheduler: AlertScheduler, config: AlertConfig) -> None:
+    """
+    Register all alert implementations with the scheduler.
+    
+    To add a new alert type:
+    1. Create a new class inheriting from BaseAlert
+    2. Import it at the top of this file
+    3. Instantiate and register it here
+    
+    Args:
+        scheduler: AlertScheduler instance
+        config: AlertConfig instance
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Register Vessel Documents Alert
+    vessel_docs_alert = VesselDocumentsAlert(config)
+    scheduler.register_alert(vessel_docs_alert.run)
+    logger.info("[OK] Registered VesselDocumentsAlert")
+    
+    # Future alerts can be registered here:
+    # hot_works_alert = HotWorksAlert(config)
+    # scheduler.register_alert(hot_works_alert.run)
+    # logger.info("[OK] Registered HotWorksAlert")
+
+
+def main():
+    """Main execution function."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Modular Alert System')
+    parser.add_argument(
+        '--dry-run', 
+        action='store_true', 
+        help='Run without sending notifications (test mode)'
+    )
+    parser.add_argument(
+        '--run-once', 
+        action='store_true', 
+        help='Run once and exit (no scheduling)'
+    )
+    args = parser.parse_args()
+    
+    try:
+        # Load configuration from environment
+        config = AlertConfig.from_env()
+        
+        # Setup logging
+        logger = setup_logging(config)
+        logger.info("=" * 70)
+        logger.info("▶ ALERT SYSTEM STARTING")
+        logger.info("=" * 70)
+        
+        # Validate configuration
+        config.validate()
+        
+        # Handle dry-run mode
+        if args.dry_run:
+            logger.info("=" * 70)
+            logger.info("[XXX] DRY RUN MODE ACTIVATED - NO NOTIFICATIONS WILL BE SENT")
+            logger.info("=" * 70)
+            config.dry_run = True
+            config.enable_email_alerts = False
+            config.enable_teams_alerts = False
+            config.enable_special_teams_email = False
+        
+        # Initialize components
+        config = initialize_components(config)
+        
+        # Create scheduler
+        scheduler = AlertScheduler(
+            frequency_hours=config.schedule_frequency_hours,
+            timezone=config.timezone
+        )
+        
+        # Register all alerts
+        register_alerts(scheduler, config)
+        
+        # Run based on mode
+        if args.run_once:
+            scheduler.run_once()
+        else:
+            scheduler.run_continuous()
+    
+    except KeyboardInterrupt:
+        logger = logging.getLogger(__name__)
+        logger.info("Interrupted by user. Shutting down...")
+        sys.exit(0)
+    
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Fatal error in main(): {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
