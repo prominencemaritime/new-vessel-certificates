@@ -11,7 +11,7 @@ ARG GID
 # Install system dependencies and create user
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev && rm -rf /var/lib/apt/lists/* \
-    && addgroup --gid $GID appuser \
+    && (getent group $GID || addgroup --gid $GID appuser) \
     && adduser --disabled-password --gecos "" --uid $UID --gid $GID appuser
 
 # Set timezone
@@ -32,7 +32,7 @@ COPY media/ ./media/
 COPY tests/ ./tests/
 
 # Create necessary directories and set ownership
-RUN mkdir -p logs data && chown -R appuser:appuser /app
+RUN mkdir -p logs data && chown -R $UID:$GID /app
 
 # Set Python to run in unbuffered mode (see logs in real-time)
 ENV PYTHONUNBUFFERED=1

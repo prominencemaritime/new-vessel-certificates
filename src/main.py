@@ -169,7 +169,7 @@ def main():
         # Handle dry-run mode
         if args.dry_run:
             logger.info("=" * 70)
-            logger.info("[XXX] DRY RUN MODE ACTIVATED - NO NOTIFICATIONS WILL BE SENT")
+            logger.info("🔒 DRY RUN MODE ACTIVATED - NO NOTIFICATIONS WILL BE SENT")
             logger.info("=" * 70)
             config.dry_run = True
             config.enable_email_alerts = False
