@@ -39,7 +39,7 @@ class VesselDocumentsAlert(BaseAlert):
         
         # Alert-specific configuration
         self.sql_query_file = 'NewVesselCertificates.sql'
-        self.lookback_days = 10  # Check last 24 hours
+        self.lookback_days = config.vessel_documents_lookback_days
 
     
     def fetch_data(self) -> pd.DataFrame:

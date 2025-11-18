@@ -20,4 +20,6 @@ LEFT JOIN vessels v
 LEFT JOIN vessel_document_categories vdc
 	ON vdc.id = vdt.vessel_document_category_id
 WHERE 
-	v.active = 'true';
+	v.active = 'true'
+    AND LOWER(v.name) NOT LIKE '%vessel%'
+    AND LOWER(v.name) NOT LIKE '%test%';

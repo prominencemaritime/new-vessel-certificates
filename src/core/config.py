@@ -6,7 +6,7 @@ Loads configuration from environment variables and provides
 validated access to all settings needed by alerts.
 """
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from pathlib import Path
 from decouple import config
 from zoneinfo import ZoneInfo
@@ -57,8 +57,11 @@ class AlertConfig:
     schedule_frequency_hours: float
     timezone: str
 
+    # Alert-specific configurations
+    vessel_documents_lookback_days: int
+
     # Tracking
-    reminder_frequency_days: float
+    reminder_frequency_days: Union[float, None]
     sent_events_file: Path
 
     # Logging
@@ -75,6 +78,7 @@ class AlertConfig:
     html_formatter: Optional['HTMLFormatter'] = None
     text_formatter: Optional['TextFormatter'] = None
     dry_run: bool = False
+    dry_run_email: str = ''  # Redirect all emails here in dry-run mode
 
     @classmethod
     def from_env(cls, project_root: Optional[Path] = None) -> 'AlertConfig':
@@ -139,8 +143,8 @@ class AlertConfig:
             schedule_frequency_hours=float(config('SCHEDULE_FREQUENCY_HOURS', default=1)),
             timezone=config('TIMEZONE', default='Europe/Athens'),
 
-            # Tracking
-            reminder_frequency_days=float(config('REMINDER_FREQUENCY_DAYS', default=30)),
+            # Tracking - if None or empty, never resend (track "forever")
+            reminder_frequency_days=config('REMINDER_FREQUENCY_DAYS', default=None, cast=lambda x: float(x) if x and x.strip() else None),
             sent_events_file=data_dir / config('SENT_EVENTS_FILE', default='sent_alerts.json'),
 
             # Logging
@@ -150,6 +154,12 @@ class AlertConfig:
 
             # URLs
             base_url=config('BASE_URL', default='https://prominence.orca.tools/'),
+
+            # Alert-specific configurations
+            vessel_documents_lookback_days=int(config('VESSEL_DOCUMENTS_LOOKBACK_DAYS', default=1)),
+
+            # Dry-run settings (don't set dry_run here, it's set by CLI flag in main.py)
+            dry_run_email=config('DRY_RUN_EMAIL', default='').strip(),
         )
 
     @staticmethod

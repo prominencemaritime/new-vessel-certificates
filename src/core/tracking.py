@@ -28,13 +28,13 @@ class EventTracker:
     reminder frequency setting.
     """
 
-    def __init__(self, tracking_file: Path, reminder_frequency_days: float, timezone: str):
+    def __init__(self, tracking_file: Path, reminder_frequency_days: Optional[float], timezone: str):
         """
         Initialize event tracker.
 
         Args:
             tracking_file: Path to JSON file for persistent storage
-            reminder_frequency_days: Days after which to allow re-sending
+            reminder_frequency_days: Days after which to allow re-sending (None = never resend)
             timezone: Timezone for timestamps
         """
         self.tracking_file = tracking_file
@@ -45,6 +45,7 @@ class EventTracker:
         # Load existing tracking data
         self._load()
 
+
     def _load(self) -> None:
         """
         Load sent events from JSON file with automatic cleanup of old entries.
@@ -53,14 +54,14 @@ class EventTracker:
             logger.info(f"Tracking file not found at {self.tracking_file}. Starting fresh.")
             self.sent_events = {}
             return
-
+        
         try:
             with open(self.tracking_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-
+            
             # Handle both old format (list) and new format (dict with timestamps)
             sent_events_data = data.get('sent_events', {})
-
+            
             # Backward compatibility: convert old list format
             if not sent_events_data and 'sent_event_ids' in data:
                 logger.info("Converting old tracking format to new format")
@@ -69,52 +70,63 @@ class EventTracker:
                     str(event_id): current_time
                     for event_id in data['sent_event_ids']
                 }
-
+            
             logger.info(f"Loaded {len(sent_events_data)} tracked event(s) from {self.tracking_file}")
-
-            # Filter out events older than reminder frequency
-            cutoff_date = datetime.now(tz=self.timezone) - timedelta(days=self.reminder_frequency_days)
-            filtered_events = {}
-            removed_count = 0
-
-            for event_key, timestamp_str in sent_events_data.items():
-                try:
-                    event_timestamp = datetime.fromisoformat(timestamp_str)
-
-                    if event_timestamp >= cutoff_date:
-                        filtered_events[event_key] = timestamp_str
-                    else:
+            
+            # Filter out events older than reminder frequency (if reminder frequency is set)
+            if self.reminder_frequency_days is not None:
+                # Reminder mode: clean up old events
+                cutoff_date = datetime.now(tz=self.timezone) - timedelta(days=self.reminder_frequency_days)
+                filtered_events = {}
+                removed_count = 0
+                
+                for event_key, timestamp_str in sent_events_data.items():
+                    try:
+                        event_timestamp = datetime.fromisoformat(timestamp_str)
+                        
+                        if event_timestamp >= cutoff_date:
+                            filtered_events[event_key] = timestamp_str
+                        else:
+                            removed_count += 1
+                            logger.debug(
+                                f"Removing event key '{event_key}' "
+                                f"(sent at {timestamp_str}, older than {self.reminder_frequency_days} days)"
+                            )
+                    
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid timestamp for event key '{event_key}': {timestamp_str}. Removing.")
                         removed_count += 1
-                        logger.debug(
-                            f"Removing event key '{event_key}' "
-                            f"(sent at {timestamp_str}, older than {self.reminder_frequency_days} days)"
-                        )
-
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid timestamp for event key '{event_key}': {timestamp_str}. Removing.")
-                    removed_count += 1
-
-            if removed_count > 0:
+                
+                if removed_count > 0:
+                    logger.info(
+                        f"Cleaned up {removed_count} event(s) older than {self.reminder_frequency_days} days"
+                    )
+                    # Save cleaned data immediately
+                    self.sent_events = filtered_events
+                    self._save()
+                else:
+                    self.sent_events = filtered_events
+                
                 logger.info(
-                    f"Cleaned up {removed_count} event(s) older than {self.reminder_frequency_days} days"
+                    f"Tracking {len(self.sent_events)} recent event(s) "
+                    f"(sent within last {self.reminder_frequency_days} days)"
                 )
-                # Save cleaned data immediately
-                self.sent_events = filtered_events
-                self._save()
+            
             else:
-                self.sent_events = filtered_events
-
-            logger.info(
-                f"Tracking {len(self.sent_events)} recent event(s) "
-                f"(sent within last {self.reminder_frequency_days} days)"
-            )
-
+                # No reminder frequency: track forever (never remove old events)
+                self.sent_events = sent_events_data
+                logger.info(
+                    f"Tracking {len(self.sent_events)} event(s) permanently "
+                    f"(no reminder frequency set - events will never be resent)"
+                )
+        
         except json.JSONDecodeError as e:
             logger.error(f"Corrupted JSON in {self.tracking_file}: {e}. Starting fresh.")
             self.sent_events = {}
         except Exception as e:
             logger.error(f"Error loading tracking data from {self.tracking_file}: {e}. Starting fresh.")
             self.sent_events = {}
+
 
     def _save(self) -> None:
         """
