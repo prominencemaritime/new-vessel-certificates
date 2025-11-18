@@ -72,6 +72,9 @@ class AlertConfig:
     # URLs
     base_url: str
 
+    # Email formatting
+    enable_document_links: bool = False
+
     # Runtime objects (injected after initialization)
     tracker: Optional['EventTracker'] = None
     email_sender: Optional['EmailSender'] = None
@@ -154,6 +157,9 @@ class AlertConfig:
 
             # URLs
             base_url=config('BASE_URL', default='https://prominence.orca.tools/'),
+
+            # Email formatting
+            enable_document_links=config('ENABLE_DOCUMENT_LINKS', default=True, cast=bool),
 
             # Alert-specific configurations
             vessel_documents_lookback_days=int(config('VESSEL_DOCUMENTS_LOOKBACK_DAYS', default=1)),
