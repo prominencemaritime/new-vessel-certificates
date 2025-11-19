@@ -41,6 +41,9 @@ class VesselDocumentsAlert(BaseAlert):
         self.sql_query_file = 'NewVesselCertificates.sql'
         self.lookback_days = config.vessel_documents_lookback_days
 
+        # Log instantiation
+        self.logger.info(f"[OK] VesselDocumentsAlert instance created")
+
     
     def fetch_data(self) -> pd.DataFrame:
         """
@@ -136,6 +139,16 @@ class VesselDocumentsAlert(BaseAlert):
             # The formatter will handle which columns to display
             full_data = vessel_df.copy()
 
+            # Specify WHICH cols to DISPLAY IN EMAIL *and* in WHAT ORDER here:
+            display_columns = [
+                    'vessel',
+                    'document_name',
+                    'document_category',
+                    'updated_at',
+                    'expiration_date',
+                    'comments'
+            ]
+
             # Create notification job
             job = {
                 'recipients': [vessel_email],
@@ -145,8 +158,7 @@ class VesselDocumentsAlert(BaseAlert):
                     'vessel_name': vessel_name,
                     'alert_title': 'Vessel Document Updates',
                     'company_name': self._get_company_name(vessel_email),
-                    'display_columns': ['vessel', 'document_name', 'document_category',
-                                       'updated_at', 'expiration_date', 'comments']  # Columns to show in email
+                    'display_columns': display_columns
                 }
             }
 
@@ -194,12 +206,12 @@ class VesselDocumentsAlert(BaseAlert):
         """
         vessel_email_lower = vessel_email.lower()
         
-        if 'prominencemaritime.com' in vessel_email_lower:
-            return 'Prominence Maritime'
-        elif 'seatraders.com' in vessel_email_lower:
-            return 'Seatraders'
+        if 'prominence' in vessel_email_lower:
+            return 'Prominence Maritime S.A.'
+        elif 'seatraders' in vessel_email_lower:
+            return 'Sea Traders S.A.'
         else:
-            return 'Company'
+            return 'Prominence Maritime S.A.'   # Default company name
 
 
     def get_tracking_key(self, row: pd.Series) -> str:
@@ -237,10 +249,7 @@ class VesselDocumentsAlert(BaseAlert):
         vessel_name = metadata.get('vessel_name', 'Vessel')
         doc_count = len(data)
         
-        if doc_count == 1:
-            return f"Vessel Document Update - {vessel_name}"
-        else:
-            return f"{doc_count} Vessel Document Updates - {vessel_name}"
+        return f"AlertDev | {vessel_name.upper()} | {doc_count} Vessel Document Update{'' if doc_count==1 else 's'}"
 
     
     def get_required_columns(self) -> List[str]:

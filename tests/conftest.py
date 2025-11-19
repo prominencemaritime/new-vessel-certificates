@@ -1,134 +1,133 @@
 # tests/conftest.py
 """
-Pytest configuration and shared fixtures for events_alerts tests
+Shared pytest fixtures for all tests.
 """
 import pytest
-import json
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from unittest.mock import Mock, MagicMock
+from datetime import datetime, timedelta
 import tempfile
-import shutil
+import json
+from unittest.mock import Mock, MagicMock
 
-# Add src to path
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.core.config import AlertConfig
+from src.core.tracking import EventTracker
+from src.core.scheduler import AlertScheduler
+from src.alerts.vessel_documents_alert import VesselDocumentsAlert
 
 
 @pytest.fixture
-def temp_project_root(tmp_path):
-    """Create a temporary project structure for testing"""
-    # Create directory structure
-    (tmp_path / 'data').mkdir()
-    (tmp_path / 'logs').mkdir()
-    (tmp_path / 'queries').mkdir()
-    (tmp_path / 'media').mkdir()
+def temp_dir():
+    """Create temporary directory for test files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+@pytest.fixture
+def mock_config(temp_dir, monkeypatch):
+    """Create a mock AlertConfig for testing."""
+    # Set minimal required environment variables
+    monkeypatch.setenv('DB_HOST', 'localhost')
+    monkeypatch.setenv('DB_PORT', '5432')
+    monkeypatch.setenv('DB_NAME', 'test_db')
+    monkeypatch.setenv('DB_USER', 'test_user')
+    monkeypatch.setenv('DB_PASS', 'test_pass')
+    monkeypatch.setenv('USE_SSH_TUNNEL', 'False')
     
-    return tmp_path
+    monkeypatch.setenv('SMTP_HOST', 'smtp.test.com')
+    monkeypatch.setenv('SMTP_PORT', '465')
+    monkeypatch.setenv('SMTP_USER', 'test@test.com')
+    monkeypatch.setenv('SMTP_PASS', 'test_pass')
+    
+    monkeypatch.setenv('INTERNAL_RECIPIENTS', 'internal@test.com')
+    monkeypatch.setenv('PROMINENCE_EMAIL_CC_RECIPIENTS', 'prom1@test.com,prom2@test.com')
+    monkeypatch.setenv('SEATRADERS_EMAIL_CC_RECIPIENTS', 'sea1@test.com,sea2@test.com')
+    
+    monkeypatch.setenv('ENABLE_EMAIL_ALERTS', 'True')
+    monkeypatch.setenv('ENABLE_TEAMS_ALERTS', 'False')
+    
+    monkeypatch.setenv('SCHEDULE_FREQUENCY_HOURS', '24')
+    monkeypatch.setenv('TIMEZONE', 'Europe/Athens')
+    monkeypatch.setenv('REMINDER_FREQUENCY_DAYS', '')  # None
+    
+    monkeypatch.setenv('BASE_URL', 'https://test.orca.tools')
+    monkeypatch.setenv('VESSEL_DOCUMENTS_LOOKBACK_DAYS', '1')
+    monkeypatch.setenv('ENABLE_DOCUMENT_LINKS', 'True')
+    
+    monkeypatch.setenv('DRY_RUN_EMAIL', '')
+    
+    # Create directories
+    (temp_dir / 'queries').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'media').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'logs').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'data').mkdir(parents=True, exist_ok=True)
+    
+    # Load config from environment
+    config = AlertConfig.from_env(project_root=temp_dir)
+    
+    return config
 
 
 @pytest.fixture
-def sample_event_data():
-    """Sample event data matching database query results"""
-    return pd.DataFrame([
-        {
-            'id': 101,
-            'event_name': 'Hot Work Permit - Deck Maintenance',
-            'created_at': '2025-10-29 08:00:00',
-            'status': 'active'
-        },
-        {
-            'id': 102,
-            'event_name': 'Hot Work Permit - Engine Room',
-            'created_at': '2025-10-29 09:30:00',
-            'status': 'active'
-        }
-    ])
-
-
-@pytest.fixture
-def empty_event_data():
-    """Empty DataFrame for no-results tests"""
-    return pd.DataFrame(columns=['id', 'event_name', 'created_at', 'status'])
-
-
-@pytest.fixture
-def sample_sent_events(local_tz):
-    """Sample sent events with timestamps"""
-    from datetime import datetime, timedelta
-    now = datetime.now(local_tz)
-    return {
-        99: (now - timedelta(days=5)).isoformat(),  # 5 days ago
-        100: (now - timedelta(days=3)).isoformat()  # 3 days ago
-    }
-
-
-@pytest.fixture
-def sent_events_json(temp_project_root, sample_sent_events):
-    """Create a sent_events.json file"""
-    sent_events_file = temp_project_root / 'data' / 'sent_events.json'
+def sample_dataframe():
+    """Create sample vessel documents DataFrame."""
     data = {
-        'sent_events': {str(k): v for k, v in sample_sent_events.items()},
-        'last_updated': '2025-10-28T15:30:00+02:00',
-        'total_count': len(sample_sent_events)
+        'vessel_id': [1, 1, 2, 3],
+        'vessel': ['SERIFOS I', 'SERIFOS I', 'AGRIA', 'BALI'],
+        'vsl_email': [
+            'serifos.i@vsl.prominencemaritime.com',
+            'serifos.i@vsl.prominencemaritime.com',
+            'agria@vsl.prominencemaritime.com',
+            'bali@vsl.prominencemaritime.com'
+        ],
+        'document_id': [101, 102, 201, 301],
+        'document_name': ['Certificate A', 'Certificate B', 'Certificate C', 'Certificate D'],
+        'document_category': ['Safety', 'Safety', 'Technical', 'Safety'],
+        'updated_at': [
+            datetime.now() - timedelta(hours=1),
+            datetime.now() - timedelta(hours=2),
+            datetime.now() - timedelta(hours=3),
+            datetime.now() - timedelta(hours=4)
+        ],
+        'expiration_date': [
+            datetime.now() + timedelta(days=30),
+            datetime.now() + timedelta(days=60),
+            datetime.now() + timedelta(days=90),
+            None
+        ],
+        'comments': ['Comment 1', 'Comment 2', '', 'Comment 4']
     }
-    with open(sent_events_file, 'w') as f:
-        json.dump(data, f, indent=2)
-    return sent_events_file
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def mock_email_sender():
+    """Create mock EmailSender."""
+    sender = Mock()
+    sender.send = Mock()
+    return sender
+
+
+@pytest.fixture
+def mock_event_tracker(temp_dir):
+    """Create EventTracker with temporary file."""
+    tracking_file = temp_dir / 'test_tracking.json'
+    tracker = EventTracker(
+        tracking_file=tracking_file,
+        reminder_frequency_days=None,
+        timezone='Europe/Athens'
+    )
+    return tracker
 
 
 @pytest.fixture
 def mock_db_connection():
-    """Mock database connection"""
+    """Mock database connection context manager."""
     mock_conn = MagicMock()
-    mock_result = MagicMock()
-    mock_result.fetchone.return_value = ('permit_id', 'Hot Work Permit')
-    mock_conn.execute.return_value = mock_result
-    mock_conn.__enter__ = Mock(return_value=mock_conn)
-    mock_conn.__exit__ = Mock(return_value=False)
-    return mock_conn
-
-
-@pytest.fixture
-def mock_smtp():
-    """Mock SMTP server"""
-    mock_server = MagicMock()
-    mock_server.__enter__ = Mock(return_value=mock_server)
-    mock_server.__exit__ = Mock(return_value=False)
-    return mock_server
-
-
-@pytest.fixture
-def mock_teams_webhook():
-    """Mock Teams webhook response"""
-    mock_card = MagicMock()
-    mock_card.send.return_value = True
-    mock_card.last_http_response = MagicMock()
-    mock_card.last_http_response.status_code = 200
-    return mock_card
-
-
-@pytest.fixture
-def local_tz():
-    """Europe/Athens timezone"""
-    return ZoneInfo('Europe/Athens')
-
-
-@pytest.fixture
-def event_status_id():
-    """Default event status ID for testing"""
-    return 3
-
-
-@pytest.fixture
-def fixed_datetime(local_tz):
-    """Fixed datetime for testing"""
-    return datetime(2025, 10, 29, 9, 41, 19, tzinfo=local_tz)
-
-
-@pytest.fixture
-def mock_smtp_class(mock_smtp):
-    """Mock SMTP class that returns configured mock_smtp instance"""
-    return MagicMock(return_value=mock_smtp)
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+    
+    def mock_get_db_connection():
+        return mock_conn
+    
+    return mock_get_db_connection, mock_cursor

@@ -43,7 +43,7 @@ class HTMLFormatter:
         # Extract metadata with defaults
         alert_title = metadata.get('alert_title', 'Alert Notification')
         vessel_name = metadata.get('vessel_name', '')
-        company_name = metadata.get('company_name', 'Company')
+        company_name = metadata.get('company_name', 'Prominence Maritime S.A.')
         
         # Determine which logos are available
         logos_html = self._build_logos_html(config)
@@ -221,12 +221,12 @@ class HTMLFormatter:
             html += f"""
         <div class="metadata">
             <div class="metadata-row">
-                <span class="metadata-label">Records Found:</span>
-                <span class="count-badge">{len(df)}</span>
+                <span class="metadata-label">Report Generated:</span>
+                {run_time.strftime('%A, %B %d, %Y at %H:%M %Z')}
             </div>
             <div class="metadata-row">
-                <span class="metadata-label">Generated:</span>
-                {run_time.strftime('%A, %B %d, %Y at %H:%M %Z')}
+                <span class="metadata-label">Records Found:</span>
+                <span class="count-badge">{len(df)}</span>
             </div>
         </div>
 """

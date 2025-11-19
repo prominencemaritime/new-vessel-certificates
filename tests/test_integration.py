@@ -1,145 +1,120 @@
 # tests/test_integration.py
 """
-Integration tests for the complete workflow
+Integration tests for complete alert workflow.
 """
 import pytest
 from unittest.mock import patch, MagicMock
 import pandas as pd
+from datetime import datetime, timedelta
 
 
-'''
-THIS TEST NEEDS UPDATING
-def test_main_flow_with_new_events(
-    temp_project_root,
-    sample_event_data,
-    mock_db_connection,
-    mock_smtp,
-    mock_smtp_class,
-    fixed_datetime,
-    local_tz
-):
-    """Test complete main() flow with new events"""
-    from src.events_alerts import main
+@patch('src.alerts.vessel_documents_alert.get_db_connection')
+@patch('src.alerts.vessel_documents_alert.pd.read_sql_query')
+@patch('src.notifications.email_sender.EmailSender.send')
+def test_complete_alert_workflow(mock_send, mock_read_sql, mock_get_db, mock_config, sample_dataframe, mock_event_tracker, temp_dir):
+    """Test complete alert workflow from fetch to send."""
+    from src.alerts.vessel_documents_alert import VesselDocumentsAlert
+    from src.formatters.html_formatter import HTMLFormatter
+    from src.formatters.text_formatter import TextFormatter
+    from src.notifications.email_sender import EmailSender
 
-    sent_events_file = temp_project_root / 'data' / 'sent_events.json'
+    # Mock get_db_connection to return a dummy context manager
+    mock_conn = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_conn
+    mock_get_db.return_value.__exit__.return_value = None
 
-    with patch('src.events_alerts.SENT_EVENTS_FILE', sent_events_file):
-        with patch('src.events_alerts.get_db_connection', return_value=mock_db_connection):
-            with patch('src.events_alerts.load_sql_query', return_value='SELECT * FROM events'):
-                with patch('src.events_alerts.LOCAL_TZ', local_tz):
-                    with patch('pandas.read_sql_query', return_value=sample_event_data):
-                        with patch('smtplib.SMTP_SSL', mock_smtp_class):
-                            with patch('src.events_alerts.load_logo', return_value=(None, None, None)):
-                                with patch('src.events_alerts.ENABLE_EMAIL_ALERTS', True):
-                                    with patch('src.events_alerts.ENABLE_TEAMS_ALERTS', False):
-                                        with patch('src.events_alerts.ENABLE_SPECIAL_TEAMS_EMAIL_ALERT', False):
-                                            with patch('src.events_alerts.INTERNAL_RECIPIENTS', ['test@test.com']):
-                                                with patch('src.events_alerts.SMTP_PORT', 465):
-                                                    with patch('src.events_alerts.SMTP_HOST', 'smtp.test.com'):
-                                                        with patch('src.events_alerts.SMTP_USER', 'test@test.com'):
-                                                            with patch('src.events_alerts.SMTP_PASS', 'password'):
-                                                                with patch('src.events_alerts.EVENT_STATUS_ID', 3):
-                                                                    main()
+    # Mock pd.read_sql_query to return sample data
+    mock_read_sql.return_value = sample_dataframe
 
-                                                                    # Verify email was sent
-                                                                    mock_smtp.send_message.assert_called_once()
+    # Create SQL query file
+    mock_config.queries_dir.mkdir(parents=True, exist_ok=True)
+    sql_file = mock_config.queries_dir / 'NewVesselCertificates.sql'
+    sql_file.write_text('SELECT * FROM vessel_documents;')
 
-                                                                    # Verify sent_events.json was created
-                                                                    assert sent_events_file.exists()
+    # Initialize components
+    mock_config.tracker = mock_event_tracker
+    mock_config.email_sender = EmailSender(
+        smtp_host='smtp.test.com',
+        smtp_port=465,
+        smtp_user='test@test.com',
+        smtp_pass='password',
+        company_logos={},
+        dry_run=False
+    )
+    mock_config.html_formatter = HTMLFormatter()
+    mock_config.text_formatter = TextFormatter()
 
-                                                                    # Verify the content of sent_events.json
-                                                                    import json
-                                                                    with open(sent_events_file, 'r') as f:
-                                                                        data = json.load(f)
-                                                                    assert '101' in data['sent_events']
-                                                                    assert '102' in data['sent_events']
-                                                                    # Verify total_count is NOT in the file
-                                                                    assert 'total_count' not in data
-'''
+    # Create and run alert
+    alert = VesselDocumentsAlert(mock_config)
+    alert.run()
+
+    # Verify email was sent (3 vessels = 3 emails)
+    assert mock_send.call_count == 3
+
+    # Verify tracking was updated (4 documents total)
+    assert len(mock_event_tracker.sent_events) == 4
 
 
-def test_main_flow_all_events_already_sent(
-    temp_project_root,
-    sample_event_data,
-    sent_events_json,
-    mock_db_connection,
-    fixed_datetime,
-    local_tz
-):
-    """Test main() flow when all events already sent"""
-    from src.events_alerts import main
-    
-    # Add sample event IDs to sent events
-    sent_events = {101: '2025-10-29T08:00:00+02:00', 102: '2025-10-29T09:30:00+02:00'}
-    
-    with patch('src.events_alerts.SENT_EVENTS_FILE', sent_events_json):
-        with patch('src.events_alerts.load_sent_events', return_value=sent_events):
-            with patch('src.events_alerts.get_db_connection', return_value=mock_db_connection):
-                with patch('src.events_alerts.load_sql_query', return_value='SELECT * FROM events'):
-                    with patch('src.events_alerts.LOCAL_TZ', local_tz):
-                        with patch('pandas.read_sql_query', return_value=sample_event_data):
-                            with patch('datetime.datetime') as mock_datetime:
-                                mock_datetime.now.return_value = fixed_datetime
-                                
-                                # Should exit early without sending notifications
-                                main()
+@patch('src.alerts.vessel_documents_alert.get_db_connection')
+@patch('src.alerts.vessel_documents_alert.pd.read_sql_query')
+def test_alert_prevents_duplicate_sends(mock_read_sql, mock_get_db, mock_config, sample_dataframe, mock_event_tracker, temp_dir):
+    """Test that alert doesn't send duplicates."""
+    from src.alerts.vessel_documents_alert import VesselDocumentsAlert
+
+    # Mock get_db_connection
+    mock_conn = MagicMock()
+    mock_get_db.return_value.__enter__.return_value = mock_conn
+    mock_get_db.return_value.__exit__.return_value = None
+
+    # Mock pd.read_sql_query to return sample data
+    mock_read_sql.return_value = sample_dataframe
+
+    # Create SQL query file
+    sql_file = mock_config.queries_dir / 'NewVesselCertificates.sql'
+    sql_file.write_text('SELECT * FROM vessel_documents;')
+
+    # Initialize
+    mock_config.tracker = mock_event_tracker
+    mock_email_sender = MagicMock()
+    mock_config.email_sender = mock_email_sender
+    mock_config.html_formatter = MagicMock()
+    mock_config.text_formatter = MagicMock()
+
+    # Mock formatters to return dummy content
+    mock_config.html_formatter.format.return_value = '<html>Test</html>'
+    mock_config.text_formatter.format.return_value = 'Test'
+
+    # First run - should send
+    alert = VesselDocumentsAlert(mock_config)
+    alert.run()
+
+    first_call_count = mock_email_sender.send.call_count
+    assert first_call_count > 0
+
+    # Second run - should not send (duplicates)
+    alert2 = VesselDocumentsAlert(mock_config)
+    alert2.run()
+
+    # Call count should be same (no new sends)
+    assert mock_email_sender.send.call_count == first_call_count
 
 
-def test_main_flow_no_events_found(
-    temp_project_root,
-    empty_event_data,
-    mock_db_connection,
-    fixed_datetime,
-    local_tz
-):
-    """Test main() flow when query returns no events"""
-    from src.events_alerts import main
-    
-    sent_events_file = temp_project_root / 'data' / 'sent_events.json'
-    
-    with patch('src.events_alerts.SENT_EVENTS_FILE', sent_events_file):
-        with patch('src.events_alerts.get_db_connection', return_value=mock_db_connection):
-            with patch('src.events_alerts.load_sql_query', return_value='SELECT * FROM events'):
-                with patch('src.events_alerts.LOCAL_TZ', local_tz):
-                    with patch('pandas.read_sql_query', return_value=empty_event_data):
-                        with patch('datetime.datetime') as mock_datetime:
-                            mock_datetime.now.return_value = fixed_datetime
-                            
-                            # Should exit early without sending notifications
-                            main()
+def test_dry_run_email_redirection(mock_config, sample_dataframe, temp_dir):
+    """Test that dry-run mode redirects emails correctly."""
+    from src.alerts.vessel_documents_alert import VesselDocumentsAlert
 
+    # Enable dry-run with email redirection
+    mock_config.dry_run = True
+    mock_config.dry_run_email = 'dryrun@test.com'
+    mock_config.enable_email_alerts = True
 
-'''
-THIS TEST NEEDS UPDATING
-def test_main_flow_notification_failure(
-    temp_project_root,
-    sample_event_data,
-    mock_db_connection,
-    fixed_datetime,
-    local_tz
-):
-    """Test main() flow when notification fails"""
-    from src.events_alerts import main
-    import smtplib
-    
-    sent_events_file = temp_project_root / 'data' / 'sent_events.json'
-    
-    with patch('src.events_alerts.SENT_EVENTS_FILE', sent_events_file):
-        with patch('src.events_alerts.get_db_connection', return_value=mock_db_connection):
-            with patch('src.events_alerts.load_sql_query', return_value='SELECT * FROM events'):
-                with patch('src.events_alerts.LOCAL_TZ', local_tz):
-                    with patch('pandas.read_sql_query', return_value=sample_event_data):
-                        with patch('smtplib.SMTP_SSL', side_effect=smtplib.SMTPException('Failed')):
-                            with patch('src.events_alerts.load_logo', return_value=(None, None, None)):
-                                with patch('src.events_alerts.ENABLE_EMAIL_ALERTS', True):
-                                    with patch('src.events_alerts.ENABLE_TEAMS_ALERTS', False):
-                                        with patch('src.events_alerts.ENABLE_SPECIAL_TEAMS_EMAIL_ALERT', False):
-                                            with patch('src.events_alerts.INTERNAL_RECIPIENTS', ['test@test.com']):
-                                                with patch('datetime.datetime') as mock_datetime:
-                                                    mock_datetime.now.return_value = fixed_datetime
-                                                    
-                                                    main()
-                                                    
-                                                    # Events should NOT be marked as sent
-                                                    # sent_events.json should either not exist or be empty
-'''
+    # Create alert
+    alert = VesselDocumentsAlert(mock_config)
+
+    # Route notifications
+    jobs = alert.route_notifications(sample_dataframe)
+
+    # All jobs should have original recipients
+    for job in jobs:
+        assert len(job['recipients']) > 0
+        assert 'vsl.prominencemaritime.com' in job['recipients'][0]

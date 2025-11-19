@@ -111,8 +111,8 @@ class AlertConfig:
 
         # Load company logos
         company_logos = {
-            'prominence': media_dir / config('PROMINENCE_LOGO', default='logo_prominence.png'),
-            'seatraders': media_dir / config('SEATRADERS_LOGO', default='logo_seatraders.png'),
+            'prominence': media_dir / config('PROMINENCE_LOGO', default='trans_logo_prominence_procreate_small.png'),
+            'seatraders': media_dir / config('SEATRADERS_LOGO', default='trans_logo_seatraders_procreate_small.png'),
         }
 
         return cls(

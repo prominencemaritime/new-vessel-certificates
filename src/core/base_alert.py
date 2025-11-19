@@ -208,7 +208,8 @@ class BaseAlert(ABC):
         Send all notification jobs and track sent events.
         
         Args:
-            jobs: List of notification job dictionaries
+            jobs: List of notification job dictionaries 
+                (e.g. for Vessel Document Updates: jobs=VesselDocumentsAlert().route_notifications())
             run_time: Timestamp of this run
             
         Returns:
@@ -221,20 +222,16 @@ class BaseAlert(ABC):
             self.logger.info(f"--> Sending notification {idx}/{len(jobs)}...")
             
             try:
-                # Get notification components
+                # Get notification components (args for format() method)
                 original_recipients = job['recipients']
                 original_cc_recipients = job.get('cc_recipients', [])
                 data = job['data']
                 metadata = job.get('metadata', {})
                 
-                # Generate email content
+                # GENERATE FORMATTED EMAIL CONTENT
                 base_subject = self.get_subject_line(data, metadata)
-                plain_text = self.config.text_formatter.format(
-                    data, run_time, self.config, metadata
-                )
-                html_content = self.config.html_formatter.format(
-                    data, run_time, self.config, metadata
-                )
+                plain_text = self.config.text_formatter.format(data, run_time, self.config, metadata)
+                html_content = self.config.html_formatter.format(data, run_time, self.config, metadata)
                 
                 # Handle dry-run email redirection
                 if self.config.dry_run and self.config.dry_run_email:
