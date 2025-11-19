@@ -176,22 +176,29 @@ class VesselDocumentsAlert(BaseAlert):
     def _get_cc_recipients(self, vessel_email: str) -> List[str]:
         """
         Determine CC recipients based on vessel email domain.
+        Always includes internal recipients.
         
         Args:
             vessel_email: Vessel's email address
             
         Returns:
-            List of CC email addresses
+            List of CC email addresses (domain-specific + internal)
         """
         vessel_email_lower = vessel_email.lower()
+        
+        # Start with empty list
+        cc_list = []
         
         # Check each configured domain
         for domain, recipients_config in self.config.email_routing.items():
             if domain.lower() in vessel_email_lower:
-                return recipients_config.get('cc', [])
+                cc_list = recipients_config.get('cc', [])
+                break
         
-        # No matching domain - no CCs
-        return []
+        # Always add internal recipients to CC list
+        all_recipients = list(set(cc_list + self.config.internal_recipients))
+        
+        return all_recipients
     
 
     def _get_company_name(self, vessel_email: str) -> str:
