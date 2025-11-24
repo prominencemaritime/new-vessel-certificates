@@ -8,6 +8,7 @@ import signal
 import threading
 import logging
 from datetime import datetime, timedelta
+from src.formatters.date_formatter import duration
 from zoneinfo import ZoneInfo
 from typing import Callable, List
 import pandas as pd
@@ -54,20 +55,6 @@ class AlertScheduler:
         self._alerts.append(alert_runner)
         logger.info(f"Registered alert: {alert_runner.__name__ if hasattr(alert_runner, '__name__') else 'anonymous'}")
     
-    def _format_duration(self, hours: float) -> str:
-        """Convert hours to human-readable duration string."""
-        td = pd.Timedelta(hours=hours)
-        parts = []
-        
-        if td.components.hours:
-            parts.append(f"{td.components.hours}h")
-        if td.components.minutes:
-            parts.append(f"{td.components.minutes}m")
-        if td.components.seconds:
-            parts.append(f"{td.components.seconds}s")
-        
-        return " ".join(parts) if parts else "0s"
-    
     def _run_all_alerts(self) -> None:
         """Execute all registered alerts."""
         if not self._alerts:
@@ -113,7 +100,7 @@ class AlertScheduler:
         """
         logger.info("=" * 60)
         logger.info(f"▶ SCHEDULER STARTED")
-        logger.info(f"Frequency: Every {self._format_duration(self.frequency_hours)}")
+        logger.info(f"Frequency: Every {duration(self.frequency_hours)}")
         logger.info(f"Timezone: {self.timezone}")
         logger.info(f"Registered alerts: {len(self._alerts)}")
         logger.info("=" * 60)
@@ -131,7 +118,7 @@ class AlertScheduler:
                 sleep_seconds = self.frequency_hours * 3600
                 next_run = datetime.now(tz=self.timezone) + timedelta(hours=self.frequency_hours)
                 
-                logger.info(f"Sleeping for {self._format_duration(self.frequency_hours)}")
+                logger.info(f"Sleeping for {duration(self.frequency_hours)}")
                 logger.info(f"Next run scheduled at: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 
                 # Use shutdown_event.wait() for interruptible sleep
