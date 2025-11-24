@@ -141,7 +141,7 @@ class VesselDocumentsAlert(BaseAlert):
 
             # Specify WHICH cols to DISPLAY IN EMAIL *and* in WHAT ORDER here:
             display_columns = [
-                    'vessel',
+                    #'vessel',
                     'document_name',
                     'document_category',
                     'updated_at',

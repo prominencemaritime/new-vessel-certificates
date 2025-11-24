@@ -8,6 +8,7 @@ and responsive design.
 from typing import Dict, Optional
 import pandas as pd
 from datetime import datetime
+from src.formatters.date_formatter import duration
 import logging
 
 logger = logging.getLogger(__name__)
@@ -202,7 +203,7 @@ class HTMLFormatter:
         </div>
         <div class="header-text">
             <h1>{alert_title}</h1>
-            {f'<p>{vessel_name}</p>' if vessel_name else ''}
+            {f'<p><h1>{vessel_name}<h1></p>' if vessel_name else ''}
             <p>{run_time.strftime('%A, %d %B %Y • %H:%M %Z')}</p>
         </div>
     </div>
@@ -223,6 +224,10 @@ class HTMLFormatter:
             <div class="metadata-row">
                 <span class="metadata-label">Report Generated:</span>
                 {run_time.strftime('%A, %B %d, %Y at %H:%M %Z')}
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Schedule Frequency:</span>
+                {duration(config.schedule_frequency_hours)}
             </div>
             <div class="metadata-row">
                 <span class="metadata-label">Records Found:</span>
