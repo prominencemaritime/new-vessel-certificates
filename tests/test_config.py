@@ -25,6 +25,7 @@ def test_config_from_env_loads_successfully(monkeypatch, temp_dir):
     monkeypatch.setenv('SMTP_USER', 'test@test.com')
     monkeypatch.setenv('SMTP_PASS', 'test_pass')
     monkeypatch.setenv('BASE_URL', 'https://test.com')
+    monkeypatch.setenv('SCHEDULE_FREQUENCY_HOURS', '1')
     monkeypatch.setenv('TIMEZONE', 'Europe/Athens')
     monkeypatch.setenv('VESSEL_DOCUMENTS_LOOKBACK_DAYS', '1')  # No comment
 
