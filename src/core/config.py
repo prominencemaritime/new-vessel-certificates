@@ -43,6 +43,7 @@ class AlertConfig:
     # Company-specific email routing
     email_routing: Dict[str, Dict[str, List[str]]]  # domain -> {to: [...], cc: [...]}
     internal_recipients: List[str]
+    department_specific_cc_recipients_filter: bool
     
     # Feature flags
     enable_email_alerts: bool
@@ -136,6 +137,7 @@ class AlertConfig:
             enable_teams_alerts=config('ENABLE_TEAMS_ALERTS', default=False, cast=bool),
             enable_special_teams_email=config('ENABLE_SPECIAL_TEAMS_EMAIL_ALERT', default=False, cast=bool),
             special_teams_email=config('SPECIAL_TEAMS_EMAIL', default='').strip(),
+            department_specific_cc_recipients_filter=config('DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER', default=False, cast=bool),
 
             company_logos=company_logos,
 

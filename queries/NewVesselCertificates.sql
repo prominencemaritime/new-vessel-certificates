@@ -2,6 +2,8 @@ SELECT
 	v.id AS vessel_id,
 	v.name AS vessel,
 	v.email AS vsl_email,
+    vdt.responsible_department_id AS department_id,
+    d.name AS department_name,
 	vdt.id AS document_id,
 	vdt.name AS document_name,
 	vdc.name AS document_category,
@@ -15,7 +17,10 @@ LEFT JOIN vessels v
 	ON v.id = vd.vessel_id
 LEFT JOIN vessel_document_categories vdc
 	ON vdc.id = vdt.vessel_document_category_id
+LEFT JOIN departments d
+    ON d.id = vdt.responsible_department_id
 WHERE 
 	v.active = 'true'
     AND LOWER(v.name) NOT LIKE '%vessel%'
-    AND LOWER(v.name) NOT LIKE '%test%';
+    AND LOWER(v.name) NOT LIKE '%test%'
+    AND vd.deleted_at IS NULL;

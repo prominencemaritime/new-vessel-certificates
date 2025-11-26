@@ -40,6 +40,7 @@ class VesselDocumentsAlert(BaseAlert):
         # Alert-specific configuration
         self.sql_query_file = 'NewVesselCertificates.sql'
         self.lookback_days = config.vessel_documents_lookback_days
+        self.department_specific_cc_recipients_filter = config.department_specific_cc_recipients_filter
 
         # Log instantiation
         self.logger.info(f"[OK] VesselDocumentsAlert instance created")
@@ -50,8 +51,8 @@ class VesselDocumentsAlert(BaseAlert):
         Fetch vessel documents from database.
         
         Returns:
-            DataFrame with columns: vessel_id, vessel, vsl_email, document_id, document_name,
-            document_category, updated_at, expiration_date, comments
+            DataFrame with columns: vessel_id, vessel, vsl_email, department_id, department_name, 
+            document_id, document_name, document_category, updated_at, expiration_date, comments
         """
         # Load SQL query
         query_path = self.config.queries_dir / self.sql_query_file
@@ -194,11 +195,31 @@ class VesselDocumentsAlert(BaseAlert):
             if domain.lower() in vessel_email_lower:
                 cc_list = recipients_config.get('cc', [])
                 break
+
+        department_cc_list = self._department_cc_filter(cc_list)
         
         # Always add internal recipients to CC list
-        all_recipients = list(set(cc_list + self.config.internal_recipients))
+        all_recipients = list(set(department_cc_list + self.config.internal_recipients))
         
         return all_recipients
+
+
+    def _department_cc_filter(self, cc_list: List[str]) -> List[str]:
+        """
+        Filter list by department
+        
+        Args:
+            cc_list: full cc list determined from .env + vessel email
+
+        Returns:
+            List of CC email addresses that match with responsible department name
+        """
+        if self.department_specific_cc_recipients_filter:
+            for email in cc_list:
+                ...
+        else:
+            return cc_list
+
     
 
     def _get_company_name(self, vessel_email: str) -> str:
@@ -258,7 +279,7 @@ class VesselDocumentsAlert(BaseAlert):
         
         return f"AlertDev | {vessel_name.upper()} | {doc_count} Vessel Document Update{'' if doc_count==1 else 's'}"
 
-    
+
     def get_required_columns(self) -> List[str]:
         """
         Return required columns for this alert.
@@ -268,10 +289,14 @@ class VesselDocumentsAlert(BaseAlert):
         """
         return [
             'vessel_id',
-            'document_id',
             'vessel',
             'vsl_email',
+            'department_id',
+            'department_name',
+            'document_id',
             'document_name',
             'document_category',
-            'updated_at'
+            'updated_at',
+            'expiration_date',
+            'comments'
         ]
