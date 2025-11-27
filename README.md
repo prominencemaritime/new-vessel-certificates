@@ -26,8 +26,9 @@ This system monitors a PostgreSQL database for vessel document updates and sends
 
 **Current Alert Type**: Vessel Document Updates
 - Monitors `vessel_documents` table for records updated in the last 24 hours
-- Sends individual emails to each vessel
+- Sends individual emails to each vessel with all their updated documents
 - Automatically determines CC recipients based on vessel email domain
+- **Optional department-specific filtering**: Only CC department contacts responsible for the documents
 - Tracks sent notifications to prevent duplicates
 - Optional reminder system after configurable days
 
@@ -231,7 +232,7 @@ USE_SSH_TUNNEL=True
 SSH_HOST=your.ssh.host.com
 SSH_PORT=22
 SSH_USER=your_ssh_user
-SSH_KEY_PATH=/app/ssh_ubuntu_key
+SSH_KEY_PATH=/app/ssh_key
 
 # ============================================================================
 # EMAIL CONFIGURATION
@@ -242,11 +243,18 @@ SMTP_USER=alerts@yourcompany.com
 SMTP_PASS=your_app_password
 
 # Internal recipients (always receive all notifications)
-INTERNAL_RECIPIENTS=admin@company.com,manager@company.com
+INTERNAL_RECIPIENTS=admin@yourcompany.com,manager@yourcompany.com
 
 # Company-specific CC recipients (applied based on vessel email domain)
-PROMINENCE_EMAIL_CC_RECIPIENTS=user1@prominencemaritime.com,user2@prominencemaritime.com
-SEATRADERS_EMAIL_CC_RECIPIENTS=user1@seatraders.com,user2@seatraders.com
+# For Company A, department emails should follow pattern: technical@, operations@, safety@, marine@
+# For Company B, department emails should follow pattern: tech@, ops@, safety@, marine@
+COMPANY_A_EMAIL_CC_RECIPIENTS=technical@companya.com,operations@companya.com,safety@companya.com,marine@companya.com
+COMPANY_B_EMAIL_CC_RECIPIENTS=tech@companyb.com,ops@companyb.com,safety@companyb.com,marine@companyb.com
+
+# Department-specific CC filtering
+# When True: Only CC department contacts whose documents are in the email (e.g., if all docs are Technical, only CC technical@)
+# When False: CC all department contacts regardless of document types (default behavior)
+DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=False
 
 # ============================================================================
 # DRY-RUN / TESTING CONFIGURATION
@@ -256,7 +264,7 @@ SEATRADERS_EMAIL_CC_RECIPIENTS=user1@seatraders.com,user2@seatraders.com
 DRY_RUN=False
 
 # When DRY_RUN=True, all emails are redirected to these addresses (comma-separated)
-DRY_RUN_EMAIL=test1@company.com,test2@company.com
+DRY_RUN_EMAIL=test@yourcompany.com
 
 # ============================================================================
 # FEATURE FLAGS
@@ -267,13 +275,13 @@ ENABLE_SPECIAL_TEAMS_EMAIL_ALERT=False
 
 # Document links (not yet implemented)
 ENABLE_DOCUMENT_LINKS=False
-BASE_URL=https://prominence.orca.tools
+BASE_URL=https://your-app-url.com
 
 # ============================================================================
 # COMPANY BRANDING
 # ============================================================================
-PROMINENCE_LOGO=trans_logo_prominence_procreate_small.png
-SEATRADERS_LOGO=trans_logo_seatraders_procreate_small.png
+COMPANY_A_LOGO=logo_company_a.png
+COMPANY_B_LOGO=logo_company_b.png
 
 # ============================================================================
 # SCHEDULING & TRACKING
@@ -329,6 +337,45 @@ LOG_BACKUP_COUNT=5
 - Matches domain to CC list (e.g., `PROMINENCE_EMAIL_CC_RECIPIENTS`)
 - Falls back to `INTERNAL_RECIPIENTS` if no match found
 
+### Department-Specific CC Filtering
+
+The system can filter CC recipients based on the responsible departments of the documents being sent.
+
+**How it works**:
+
+When `DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=True`:
+1. System identifies all unique departments for a vessel's documents
+2. Filters CC list to only include emails matching those departments
+3. Always includes `INTERNAL_RECIPIENTS` regardless of department
+
+**Email matching rules**:
+- Technical department → Emails starting with `te` or `tech`
+- Operations department → Emails starting with `op` or `ops`
+- HSSQE department → Emails starting with `hs` or containing `safety`
+- Marine department → Emails starting with `ma` or `marine`
+
+**Example scenario**:
+
+Vessel "ALPHA" has 3 documents updated:
+- Document A → Technical Department
+- Document B → Technical Department
+- Document C → HSSQE Department
+
+**With filtering OFF** (`DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=False`):
+```
+TO: alpha@vsl.companya.com
+CC: technical@companya.com, operations@companya.com,
+    safety@companya.com, marine@companya.com,
+    internal@yourcompany.com
+```
+
+**With filtering ON** (`DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=True`):
+```
+TO: alpha@vsl.companya.com
+CC: technical@companya.com, safety@companya.com,
+    internal@yourcompany.com
+```
+
 ---
 
 ## 🎮 Usage
@@ -365,7 +412,7 @@ docker-compose up -d  # Runs continuously
 ======================================================================
 [OK] Configuration validation passed
 ======================================================================
-🔒 DRY RUN MODE ACTIVATED - EMAILS REDIRECTED TO: test@company.com
+🔒 DRY RUN MODE ACTIVATED - EMAILS REDIRECTED TO: test@yourcompany.com
 ======================================================================
 [OK] Event tracker initialized
 [OK] Email sender initialized (DRY-RUN MODE - emails redirected)
@@ -380,24 +427,24 @@ Executing alert 1/1...
 ▶ VesselDocumentsAlert RUN STARTED
 ============================================================
 --> Fetching data from database...
-[OK] Fetched 7781 record(s)
+[OK] Fetched 156 record(s)
 --> Applying filtering logic...
-[OK] Filtered to 29 document(s) updated in last 1 day(s)
+[OK] Filtered to 12 document(s) updated in last 1 day(s)
 --> Checking for previously sent notifications...
-[OK] 29 new record(s) to notify
+[OK] 12 new record(s) to notify
 --> Routing notifications to recipients...
-[OK] Created notification job for vessel 'KNOSSOS' (3 document(s))
-[OK] Created notification job for vessel 'MINI' (25 document(s))
-[OK] Created notification job for vessel 'NONDAS' (1 document(s))
+[OK] Created notification job for vessel 'VESSEL A' (5 document(s))
+[OK] Created notification job for vessel 'VESSEL B' (4 document(s))
+[OK] Created notification job for vessel 'VESSEL C' (3 document(s))
 [OK] Created 3 notification job(s)
 --> Sending notification 1/3...
-[DRY-RUN] Email redirected to: test@company.com
-[DRY-RUN] Original recipient: knossos@vsl.prominencemaritime.com
-[DRY-RUN] Original CC: user1@prominencemaritime.com, user2@prominencemaritime.com
-[DRY-RUN] Subject: AlertDev | KNOSSOS | 3 Vessel Document Updates
+[DRY-RUN] Email redirected to: test@yourcompany.com
+[DRY-RUN] Original recipient: vessela@vsl.companya.com
+[DRY-RUN] Original CC: technical@companya.com, safety@companya.com
+[DRY-RUN] Subject: AlertDev | VESSEL A | 5 Vessel Document Updates
 [OK] Sent notification 1/3
 ...
-[OK] Marked 29 event(s) as sent
+[OK] Marked 12 event(s) as sent
 ◼ VesselDocumentsAlert RUN COMPLETE
 ```
 
@@ -417,9 +464,9 @@ Executing alert 1/1...
 [OK] Next run at: 2025-11-20 14:30:00 EET
 Running 1 alert(s)...
 ...
-[OK] Sent notification to knossos@vsl.prominencemaritime.com
-[OK] CC: user1@prominencemaritime.com, user2@prominencemaritime.com
-[OK] Marked 29 event(s) as sent
+[OK] Sent notification to vessela@vsl.companya.com
+[OK] CC: technical@companya.com, safety@companya.com
+[OK] Marked 12 event(s) as sent
 ◼ VesselDocumentsAlert RUN COMPLETE
 [OK] Sleeping until next run...
 ```
@@ -462,18 +509,18 @@ docker-compose run --rm alerts bash
 
 ### Test Coverage
 
-Current coverage: **59%** overall
+Current coverage: **61%** overall
 
 | Module | Coverage | Status |
 |--------|----------|--------|
 | `src/core/config.py` | 98% | ✅ Excellent |
 | `src/formatters/text_formatter.py` | 95% | ✅ Excellent |
+| `src/alerts/vessel_documents_alert.py` | 93% | ✅ Excellent |
 | `src/formatters/html_formatter.py` | 91% | ✅ Excellent |
-| `src/alerts/vessel_documents_alert.py` | 88% | ✅ Good |
 | `src/core/base_alert.py` | 74% | ✅ Good |
 | `src/core/tracking.py` | 71% | ⚠️ Acceptable |
 | `src/notifications/email_sender.py` | 57% | ⚠️ Acceptable |
-| `src/core/scheduler.py` | 47% | ⚠️ Needs work |
+| `src/core/scheduler.py` | 52% | ⚠️ Needs work |
 | `src/db_utils.py` | 32% | ⚠️ Needs work |
 | `src/main.py` | 0% | ❌ Not tested (entry point) |
 
@@ -502,7 +549,152 @@ tests/
 
 ### Writing New Tests
 
-When adding a new alert type, create corresponding tests:
+When adding a new alert type, you'll need to:
+
+#### 1. Set up test fixtures in `conftest.py`
+
+Test fixtures provide reusable test data and mock configurations. Here's what you need:
+
+```python
+# tests/conftest.py
+import pytest
+import pandas as pd
+from pathlib import Path
+from datetime import datetime, timedelta
+import tempfile
+
+from src.core.config import AlertConfig
+
+
+@pytest.fixture
+def temp_dir():
+    """Create temporary directory for test files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+@pytest.fixture
+def mock_config(temp_dir, monkeypatch):
+    """
+    Create a mock AlertConfig for testing.
+
+    IMPORTANT: Use fake domains and credentials only!
+    - Use .test TLD for email domains (reserved for testing)
+    - Use obviously fake credentials
+    - Never use real company data in tests
+    """
+    # Database configuration (fake)
+    monkeypatch.setenv('DB_HOST', 'localhost')
+    monkeypatch.setenv('DB_PORT', '5432')
+    monkeypatch.setenv('DB_NAME', 'test_db')
+    monkeypatch.setenv('DB_USER', 'test_user')
+    monkeypatch.setenv('DB_PASS', 'test_pass')
+    monkeypatch.setenv('USE_SSH_TUNNEL', 'False')
+
+    # SMTP configuration (fake)
+    monkeypatch.setenv('SMTP_HOST', 'smtp.test.com')
+    monkeypatch.setenv('SMTP_PORT', '465')
+    monkeypatch.setenv('SMTP_USER', 'test@test.com')
+    monkeypatch.setenv('SMTP_PASS', 'test_pass')
+
+    # Email recipients (use .test domains - reserved for testing)
+    monkeypatch.setenv('INTERNAL_RECIPIENTS', 'internal@test.com')
+    monkeypatch.setenv('COMPANY_A_EMAIL_CC_RECIPIENTS',
+        'technical@company1.test,operations@company1.test,safety@company1.test,marine@company1.test')
+    monkeypatch.setenv('COMPANY_B_EMAIL_CC_RECIPIENTS',
+        'tech@company2.test,ops@company2.test,safety@company2.test,marine@company2.test')
+    monkeypatch.setenv('DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER', 'False')
+
+    # Feature flags
+    monkeypatch.setenv('ENABLE_EMAIL_ALERTS', 'True')
+    monkeypatch.setenv('ENABLE_TEAMS_ALERTS', 'False')
+
+    # Scheduling & tracking
+    monkeypatch.setenv('SCHEDULE_FREQUENCY_HOURS', '24')
+    monkeypatch.setenv('TIMEZONE', 'Europe/Athens')
+    monkeypatch.setenv('REMINDER_FREQUENCY_DAYS', '')
+
+    # URLs & paths
+    monkeypatch.setenv('BASE_URL', 'https://test.example.com')
+    monkeypatch.setenv('VESSEL_DOCUMENTS_LOOKBACK_DAYS', '1')
+    monkeypatch.setenv('ENABLE_DOCUMENT_LINKS', 'True')
+    monkeypatch.setenv('DRY_RUN_EMAIL', '')
+
+    # Create temporary directories
+    (temp_dir / 'queries').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'media').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'logs').mkdir(parents=True, exist_ok=True)
+    (temp_dir / 'data').mkdir(parents=True, exist_ok=True)
+
+    # Load config
+    config = AlertConfig.from_env(project_root=temp_dir)
+
+    # Override email routing with test domains
+    config.email_routing = {
+        'company1.test': {
+            'cc': ['technical@company1.test', 'operations@company1.test',
+                   'safety@company1.test', 'marine@company1.test']
+        },
+        'company2.test': {
+            'cc': ['tech@company2.test', 'ops@company2.test',
+                   'safety@company2.test', 'marine@company2.test']
+        }
+    }
+
+    return config
+
+
+@pytest.fixture
+def sample_dataframe():
+    """
+    Create sample test data.
+
+    IMPORTANT: Use only fake/generic data!
+    - Generic vessel names (TEST VESSEL 1, VESSEL A, etc.)
+    - Test email domains (@company1.test, @test.com)
+    - No real company information
+    """
+    data = {
+        'vessel_id': [1, 1, 2, 3],
+        'vessel': ['TEST VESSEL 1', 'TEST VESSEL 1', 'TEST VESSEL 2', 'TEST VESSEL 3'],
+        'vsl_email': [
+            'vessel1@vsl.company1.test',
+            'vessel1@vsl.company1.test',
+            'vessel2@vsl.company1.test',
+            'vessel3@vsl.company1.test'
+        ],
+        'department_id': [1, 2, 1, 2],
+        'department_name': ['Technical', 'HSSQE', 'Technical', 'Operations'],
+        'document_id': [101, 102, 201, 301],
+        'document_name': ['Test Certificate A', 'Test Certificate B', 'Test Certificate C', 'Test Certificate D'],
+        'document_category': ['Safety', 'Safety', 'Technical', 'Safety'],
+        'updated_at': [
+            datetime.now() - timedelta(hours=1),
+            datetime.now() - timedelta(hours=2),
+            datetime.now() - timedelta(hours=3),
+            datetime.now() - timedelta(hours=4)
+        ],
+        'expiration_date': [
+            datetime.now() + timedelta(days=30),
+            datetime.now() + timedelta(days=60),
+            datetime.now() + timedelta(days=90),
+            None
+        ],
+        'comments': ['Test comment 1', 'Test comment 2', '', 'Test comment 4']
+    }
+    return pd.DataFrame(data)
+```
+
+**Key principles for test fixtures:**
+- ✅ Use `.test` TLD for email domains (RFC-reserved for testing)
+- ✅ Use obviously fake credentials (`test_user`, `test_pass`)
+- ✅ Use generic names (TEST VESSEL 1, Company A)
+- ❌ Never use real company names or domains
+- ❌ Never use real email addresses
+- ❌ Never use production credentials
+
+#### 2. Create test file for your new alert
+
 ```python
 # tests/test_my_new_alert.py
 import pytest
@@ -512,6 +704,7 @@ from src.alerts.my_new_alert import MyNewAlert
 def test_alert_initializes_correctly(mock_config):
     """Test that alert initializes with correct configuration."""
     alert = MyNewAlert(mock_config)
+
     assert alert.sql_query_file == 'MyQuery.sql'
     assert alert.lookback_days == 7
 
@@ -520,8 +713,109 @@ def test_alert_filters_data_correctly(mock_config, sample_dataframe):
     """Test filtering logic."""
     alert = MyNewAlert(mock_config)
     filtered = alert.filter_data(sample_dataframe)
+
     assert len(filtered) > 0
+    assert all(filtered['status'] == 'pending')  # Example assertion
+
+
+def test_alert_routes_notifications(mock_config, sample_dataframe):
+    """Test notification routing."""
+    alert = MyNewAlert(mock_config)
+    jobs = alert.route_notifications(sample_dataframe)
+
+    assert len(jobs) > 0
+
+    # Check first job structure
+    job = jobs[0]
+    assert 'recipients' in job
+    assert 'cc_recipients' in job
+    assert 'data' in job
+    assert 'metadata' in job
+
+    # Verify test domains (not real domains!)
+    assert '@company1.test' in job['recipients'][0] or '@company2.test' in job['recipients'][0]
+
+
+def test_alert_generates_tracking_keys(mock_config, sample_dataframe):
+    """Test tracking key generation."""
+    alert = MyNewAlert(mock_config)
+
+    row = sample_dataframe.iloc[0]
+    key = alert.get_tracking_key(row)
+
+    # Verify key format
+    assert isinstance(key, str)
+    assert len(key) > 0
+    assert 'vessel' in key or 'event' in key  # Example assertion
+
+
+def test_alert_subject_lines(mock_config, sample_dataframe):
+    """Test subject line generation."""
+    alert = MyNewAlert(mock_config)
+
+    # Single record
+    single_df = sample_dataframe.iloc[:1]
+    subject = alert.get_subject_line(single_df, {'vessel_name': 'TEST VESSEL'})
+
+    assert 'TEST VESSEL' in subject
+    assert '1' in subject  # Count
+
+    # Multiple records
+    multi_df = sample_dataframe.iloc[:3]
+    subject = alert.get_subject_line(multi_df, {'vessel_name': 'TEST VESSEL'})
+
+    assert 'TEST VESSEL' in subject
+    assert '3' in subject  # Count
+
+
+def test_alert_required_columns(mock_config):
+    """Test required columns are defined."""
+    alert = MyNewAlert(mock_config)
+    required = alert.get_required_columns()
+
+    assert isinstance(required, list)
+    assert len(required) > 0
+    assert 'vessel_id' in required  # Example
 ```
+
+#### 3. Testing best practices
+
+**DO:**
+- ✅ Test each abstract method independently
+- ✅ Test edge cases (empty data, single record, many records)
+- ✅ Test error handling (missing columns, invalid data)
+- ✅ Use descriptive test names
+- ✅ Add docstrings to tests
+- ✅ Use assertions that explain what failed
+
+**DON'T:**
+- ❌ Test with real database connections (mock them)
+- ❌ Test with real email sending (mock it)
+- ❌ Use real credentials or company data
+- ❌ Make tests depend on external services
+- ❌ Write tests that take a long time to run
+
+#### 4. Run your tests
+
+```bash
+# Run just your new tests
+pytest tests/test_my_new_alert.py -v
+
+# Run with coverage to see what you're testing
+pytest tests/test_my_new_alert.py --cov=src/alerts/my_new_alert --cov-report=term
+
+# Run all tests to ensure you didn't break anything
+pytest tests/ -v
+```
+
+---
+
+This expanded section now shows:
+1. **Complete conftest.py setup** with explanations
+2. **Why we use `.test` domains** and fake credentials
+3. **Complete test file example** with multiple test functions
+4. **Best practices** for writing tests
+5. **How to run tests** for your new alert
 
 ---
 
@@ -595,14 +889,16 @@ rm queries/NewVesselCertificates.sql
 vim queries/EventHotWork.sql
 ```
 
-**Example query**:
+**Example query** (must include department columns if using department filtering):
 ```sql
-SELECT 
+SELECT
     event_id,
     event_name,
     vessel_id,
     vessel_name,
     vessel_email,
+    department_id,      -- Required for department filtering
+    department_name,    -- Required for department filtering
     created_at,
     status,
     reviewer_notes
@@ -724,6 +1020,8 @@ class HotWorksAlert(BaseAlert):
             'vessel_id',
             'vessel_name',
             'vessel_email',
+            'department_id',      # Required if using department filtering
+            'department_name',    # Required if using department filtering
             'created_at',
             'status'
         ]
@@ -1340,17 +1638,29 @@ Check: Is tracking_key in sent_alerts.json?
 1. Alert groups data by vessel_id
    ↓
 2. For each vessel:
-   - Get vessel_email (e.g., "vessel@vsl.prominencemaritime.com")
-   - Extract domain: "prominencemaritime.com"
+   - Get vessel_email (e.g., "vessel@vsl.companya.com")
+   - Extract domain: "companya.com"
+   - Collect unique departments from all documents
    ↓
-3. Look up CC list in email_routing config:
-   - Match "prominencemaritime.com" → PROMINENCE_EMAIL_CC_RECIPIENTS
-   - Match "seatraders.com" → SEATRADERS_EMAIL_CC_RECIPIENTS
-   - No match → Use INTERNAL_RECIPIENTS only
+3. Look up base CC list in email_routing config:
+   - Match "companya.com" → COMPANY_A_EMAIL_CC_RECIPIENTS
+   - Match "companyb.com" → COMPANY_B_EMAIL_CC_RECIPIENTS
+   - No match → Use empty list
    ↓
-4. Create email job:
+4. Apply department filtering (if enabled):
+   - If DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=True:
+     * Filter base CC list to only emails matching document departments
+     * Example: Documents are Technical + HSSQE → Keep only technical@ and safety@
+   - If DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER=False:
+     * Keep all CC recipients from base list
+   ↓
+5. Add internal recipients (always included):
+   - Merge filtered CC list with INTERNAL_RECIPIENTS
+   ↓
+6. Create email job:
    - TO: vessel_email
-   - CC: matched CC list + INTERNAL_RECIPIENTS
+   - CC: filtered CC list + INTERNAL_RECIPIENTS
+   - Body: All documents with department column visible
 ```
 
 ### Dry-Run Safety Layers
@@ -1383,7 +1693,7 @@ For questions or issues:
 3. **Test in dry-run**: `docker-compose run --rm alerts python -m src.main --dry-run --run-once`
 4. **Check tracking file**: `cat data/sent_alerts.json | jq '.'`
 5. **Run tests**: `docker-compose run --rm alerts pytest tests/ -v`
-6. **Contact**: data@prominencemaritime.com
+6. **Contact**: your-team@yourcompany.com
 
 ---
 

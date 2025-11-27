@@ -119,7 +119,7 @@ class VesselDocumentsAlert(BaseAlert):
         Route documents to vessel-specific emails with company CC lists.
 
         Each vessel gets a separate email with only their documents.
-        CC recipients are determined by vessel email domain.
+        CC recipients are determined by vessel email domain AND responsible departments.
 
         Args:
             df: Filtered DataFrame with recent document updates
@@ -129,37 +129,43 @@ class VesselDocumentsAlert(BaseAlert):
         """
         jobs = []
 
-        # Group by vessel
+        # Group by vessel only (not by department)
         grouped = df.groupby(['vessel', 'vsl_email'])
 
         for (vessel_name, vessel_email), vessel_df in grouped:
-            # Determine CC recipients based on email domain
-            cc_recipients = self._get_cc_recipients(vessel_email)
+            # Get base CC recipients for this company
+            base_cc_recipients = self._get_base_cc_recipients(vessel_email)
+
+            # Collect all unique departments for this vessel's documents
+            unique_departments = vessel_df['department_name'].dropna().unique().tolist()
+
+            # Filter CC list to only include departments with documents
+            cc_recipients = self._department_cc_filter(base_cc_recipients, unique_departments)
 
             # Keep full data with tracking columns for the job
-            # The formatter will handle which columns to display
             full_data = vessel_df.copy()
 
             # Specify WHICH cols to DISPLAY IN EMAIL *and* in WHAT ORDER here:
             display_columns = [
-                    #'vessel',
-                    'document_name',
-                    'document_category',
-                    'updated_at',
-                    'expiration_date',
-                    'comments'
+                'department_name',
+                'document_name',
+                'document_category',
+                'updated_at',
+                'expiration_date',
+                'comments'
             ]
 
             # Create notification job
             job = {
                 'recipients': [vessel_email],
                 'cc_recipients': cc_recipients,
-                'data': full_data,  # Keep all columns including vessel_id, document_id
+                'data': full_data,
                 'metadata': {
                     'vessel_name': vessel_name,
                     'alert_title': 'Vessel Document Updates',
                     'company_name': self._get_company_name(vessel_email),
-                    'display_columns': display_columns
+                    'display_columns': display_columns,
+                    'departments': unique_departments
                 }
             }
 
@@ -167,60 +173,74 @@ class VesselDocumentsAlert(BaseAlert):
 
             self.logger.info(
                 f"Created notification job for vessel '{vessel_name}' "
-                f"({len(full_data)} document(s)) -> {vessel_email} "
-                f"(CC: {len(cc_recipients)})"
+                f"({len(full_data)} document(s), {len(unique_departments)} department(s): {', '.join(unique_departments)}) "
+                f"-> {vessel_email} (CC: {len(cc_recipients)})"
             )
 
         return jobs
 
 
-    def _get_cc_recipients(self, vessel_email: str) -> List[str]:
+    def _get_base_cc_recipients(self, vessel_email: str) -> List[str]:
         """
-        Determine CC recipients based on vessel email domain.
-        Always includes internal recipients.
-        
+        Get base CC recipients for a company (before department filtering).
+
         Args:
             vessel_email: Vessel's email address
-            
+
         Returns:
-            List of CC email addresses (domain-specific + internal)
+            List of all company CC email addresses (not yet filtered by department)
         """
         vessel_email_lower = vessel_email.lower()
-        
+
         # Start with empty list
         cc_list = []
-        
+
         # Check each configured domain
         for domain, recipients_config in self.config.email_routing.items():
             if domain.lower() in vessel_email_lower:
                 cc_list = recipients_config.get('cc', [])
                 break
 
-        department_cc_list = self._department_cc_filter(cc_list)
-        
-        # Always add internal recipients to CC list
-        all_recipients = list(set(department_cc_list + self.config.internal_recipients))
-        
-        return all_recipients
+        return cc_list
 
 
-    def _department_cc_filter(self, cc_list: List[str]) -> List[str]:
+    def _department_cc_filter(self, cc_list: List[str], department_names: List[str]) -> List[str]:
         """
-        Filter list by department
-        
+        Filter CC list to only include emails for responsible departments.
+        Always includes internal recipients.
+
         Args:
-            cc_list: full cc list determined from .env + vessel email
+            cc_list: Full company CC list from .env
+            department_names: List of responsible department names for this vessel's documents
 
         Returns:
-            List of CC email addresses that match with responsible department name
+            List of CC email addresses matching responsible departments + internal recipients
         """
-        if self.department_specific_cc_recipients_filter:
-            for email in cc_list:
-                ...
-        else:
-            return cc_list
+        if not self.department_specific_cc_recipients_filter:
+            # Filter is OFF: return full company CC list + internal recipients
+            return list(set(cc_list + self.config.internal_recipients))
 
-    
+        # Filter is ON: only include emails matching responsible departments
+        filtered_cc_list = []
+
+        for email in cc_list:
+            email_username = email.strip().split('@')[0].lower()
+
+            # Check if email matches any of the responsible departments
+            for dept_name in department_names:
+                dept_prefix = dept_name.lower()[:2]  # First 2 chars: "te", "op", "hs", "ma"
+
+                # Match by prefix OR special case for safety/HSSQE
+                if (email_username[:2] == dept_prefix or
+                    (email_username == 'safety' and dept_name.upper() == 'HSSQE')):
+                    filtered_cc_list.append(email)
+                    break  # Don't add same email twice
+
+        # Always add internal recipients
+        all_recipients = list(set(filtered_cc_list + self.config.internal_recipients))
+
+        return all_recipients
+
 
     def _get_company_name(self, vessel_email: str) -> str:
         """

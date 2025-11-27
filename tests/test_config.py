@@ -54,12 +54,19 @@ def test_config_validation_fails_without_smtp_credentials(mock_config):
 
 def test_config_email_routing_loaded_correctly(mock_config):
     """Test that email routing dictionary is properly loaded."""
-    assert 'prominencemaritime.com' in mock_config.email_routing
-    assert 'seatraders.com' in mock_config.email_routing
+    assert 'company1.test' in mock_config.email_routing
+    assert 'company2.test' in mock_config.email_routing
 
     # Email routing has nested structure: {'domain': {'cc': [emails]}}
-    assert 'cc' in mock_config.email_routing['prominencemaritime.com']
-    assert len(mock_config.email_routing['prominencemaritime.com']['cc']) == 2
+    assert 'cc' in mock_config.email_routing['company1.test']
+    assert len(mock_config.email_routing['company1.test']['cc']) == 4
+
+    # Verify the actual emails are present
+    company1_cc = mock_config.email_routing['company1.test']['cc']
+    assert 'technical@company1.test' in company1_cc
+    assert 'operations@company1.test' in company1_cc
+    assert 'safety@company1.test' in company1_cc
+    assert 'marine@company1.test' in company1_cc
 
 
 def test_config_reminder_frequency_none_when_empty(monkeypatch, temp_dir):

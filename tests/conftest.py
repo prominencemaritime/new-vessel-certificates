@@ -38,10 +38,11 @@ def mock_config(temp_dir, monkeypatch):
     monkeypatch.setenv('SMTP_PORT', '465')
     monkeypatch.setenv('SMTP_USER', 'test@test.com')
     monkeypatch.setenv('SMTP_PASS', 'test_pass')
-    
+
     monkeypatch.setenv('INTERNAL_RECIPIENTS', 'internal@test.com')
-    monkeypatch.setenv('PROMINENCE_EMAIL_CC_RECIPIENTS', 'prom1@test.com,prom2@test.com')
-    monkeypatch.setenv('SEATRADERS_EMAIL_CC_RECIPIENTS', 'sea1@test.com,sea2@test.com')
+    monkeypatch.setenv('PROMINENCE_EMAIL_CC_RECIPIENTS','technical@company1.test,operations@company1.test,safety@company1.test,marine@company1.test')
+    monkeypatch.setenv('SEATRADERS_EMAIL_CC_RECIPIENTS','tech@company2.test,ops@company2.test,safety@company2.test,marine@company2.test')
+    monkeypatch.setenv('DEPARTMENT_SPECIFIC_CC_RECIPIENTS_FILTER', 'False')
     
     monkeypatch.setenv('ENABLE_EMAIL_ALERTS', 'True')
     monkeypatch.setenv('ENABLE_TEAMS_ALERTS', 'False')
@@ -55,6 +56,8 @@ def mock_config(temp_dir, monkeypatch):
     monkeypatch.setenv('ENABLE_DOCUMENT_LINKS', 'True')
     
     monkeypatch.setenv('DRY_RUN_EMAIL', '')
+    monkeypatch.setenv('DRY_RUN', 'False')  # ADD THIS
+    monkeypatch.setenv('RUN_ONCE', 'True')  # ADD THIS (if not already there)
     
     # Create directories
     (temp_dir / 'queries').mkdir(parents=True, exist_ok=True)
@@ -62,8 +65,20 @@ def mock_config(temp_dir, monkeypatch):
     (temp_dir / 'logs').mkdir(parents=True, exist_ok=True)
     (temp_dir / 'data').mkdir(parents=True, exist_ok=True)
     
-    # Load config from environment
+    # Update the email_routing domain keys
     config = AlertConfig.from_env(project_root=temp_dir)
+
+    # Override with test domains
+    config.email_routing = {
+        'company1.test': {
+            'cc': ['technical@company1.test', 'operations@company1.test', 
+                   'safety@company1.test', 'marine@company1.test']
+        },
+        'company2.test': {
+            'cc': ['tech@company2.test', 'ops@company2.test', 
+                   'safety@company2.test', 'marine@company2.test']
+        }
+    }
     
     return config
 
@@ -73,13 +88,15 @@ def sample_dataframe():
     """Create sample vessel documents DataFrame."""
     data = {
         'vessel_id': [1, 1, 2, 3],
-        'vessel': ['SERIFOS I', 'SERIFOS I', 'AGRIA', 'BALI'],
+        'vessel': ['TEST VESSEL 1', 'TEST VESSEL 1', 'TEST VESSEL 2', 'TEST VESSEL 3'],
         'vsl_email': [
-            'serifos.i@vsl.prominencemaritime.com',
-            'serifos.i@vsl.prominencemaritime.com',
-            'agria@vsl.prominencemaritime.com',
-            'bali@vsl.prominencemaritime.com'
+            'vessel1@vsl.company1.test',
+            'vessel1@vsl.company1.test',
+            'vessel2@vsl.company1.test',
+            'vessel3@vsl.company1.test'
         ],
+        'department_id': [1, 2, 1, 2],  # NEW
+        'department_name': ['Technical', 'HSSQE', 'Technical', 'Operations'],  # NEW
         'document_id': [101, 102, 201, 301],
         'document_name': ['Certificate A', 'Certificate B', 'Certificate C', 'Certificate D'],
         'document_category': ['Safety', 'Safety', 'Technical', 'Safety'],

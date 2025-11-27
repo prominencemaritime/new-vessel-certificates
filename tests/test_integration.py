@@ -117,4 +117,4 @@ def test_dry_run_email_redirection(mock_config, sample_dataframe, temp_dir):
     # All jobs should have original recipients
     for job in jobs:
         assert len(job['recipients']) > 0
-        assert 'vsl.prominencemaritime.com' in job['recipients'][0]
+        assert 'vsl.company1.test' in job['recipients'][0]
