@@ -175,6 +175,7 @@ class VesselDocumentsAlert(BaseAlert):
                 f"Created notification job for vessel '{vessel_name}' "
                 f"({len(full_data)} document(s), {len(unique_departments)} department(s): {', '.join(unique_departments)}) "
                 f"-> {vessel_email} (CC: {len(cc_recipients)})"
+                f"{' [dept filtering: ON]' if self.department_specific_cc_recipients_filter else ' [dept filtering: OFF]'}"
             )
 
         return jobs
@@ -218,9 +219,18 @@ class VesselDocumentsAlert(BaseAlert):
         """
         if not self.department_specific_cc_recipients_filter:
             # Filter is OFF: return full company CC list + internal recipients
-            return list(set(cc_list + self.config.internal_recipients))
+            all_recipients = list(set(cc_list + self.config.internal_recipients))
+            self.logger.debug(
+                f"Department filtering OFF - including all {len(cc_list)} company CC recipients + "
+                f"{len(self.config.internal_recipients)} internal recipients"
+            )
+            return all_recipients
 
         # Filter is ON: only include emails matching responsible departments
+        self.logger.info(
+            f"Department filtering ON - filtering CC list for departments: {', '.join(department_names)}"
+        )
+
         filtered_cc_list = []
 
         for email in cc_list:
@@ -234,10 +244,19 @@ class VesselDocumentsAlert(BaseAlert):
                 if (email_username[:2] == dept_prefix or
                     (email_username == 'safety' and dept_name.upper() == 'HSSQE')):
                     filtered_cc_list.append(email)
+                    self.logger.debug(f"  ✓ Matched {email} to department '{dept_name}'")
                     break  # Don't add same email twice
+            else:
+                # Email didn't match any department
+                self.logger.debug(f"  ✗ Excluded {email} (no matching department)")
 
         # Always add internal recipients
         all_recipients = list(set(filtered_cc_list + self.config.internal_recipients))
+
+        self.logger.info(
+            f"Department filtering result: {len(filtered_cc_list)} department-specific + "
+            f"{len(self.config.internal_recipients)} internal = {len(all_recipients)} total CC recipients"
+        )
 
         return all_recipients
 
@@ -297,7 +316,7 @@ class VesselDocumentsAlert(BaseAlert):
         vessel_name = metadata.get('vessel_name', 'Vessel')
         doc_count = len(data)
         
-        return f"AlertDev | {vessel_name.upper()} | {doc_count} Vessel Document Update{'' if doc_count==1 else 's'}"
+        return f"AlertDev | {vessel_name.upper()} | Vessel Document Updates"
 
 
     def get_required_columns(self) -> List[str]:
