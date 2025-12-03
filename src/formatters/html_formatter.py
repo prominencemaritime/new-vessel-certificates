@@ -203,7 +203,7 @@ class HTMLFormatter:
         </div>
         <div class="header-text">
             <h1>{alert_title}</h1>
-            {f'<p><h2>{vessel_name}<h2></p>' if vessel_name else ''}
+            {f'<p>{vessel_name}</p>' if vessel_name else ''}
             <p>{run_time.strftime('%A, %d %B %Y • %H:%M %Z')}</p>
         </div>
     </div>
