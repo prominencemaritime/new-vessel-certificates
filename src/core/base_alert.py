@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ class BaseAlert(ABC):
 
     def __init__(self, config: 'AlertConfig'):
         """
-        Initialize alert with configuration.
+        Initialise alert with configuration.
 
         Args:
             config: AlertConfig instance with all necessary settings
@@ -152,24 +153,26 @@ class BaseAlert(ABC):
 
         try:
             # Step 1: Fetch data
-            self.logger.info("--> Fetching data from database...")
+            self.logger.info("--> Fetching data from database: df = self.fetch_data()")
             df = self.fetch_data()
-            self.logger.info(f"[OK] Fetched {len(df)} record(s)")
+            self.logger.info(f"[OK] Fetched len(df)={len(df)} record{'' if len(df)==1 else 's'}")
 
             if df.empty:
-                self.logger.info("No records found matching query criteria")
+                self.logger.info("No records found matching query criteria: df.empty == True")
+                self._write_health_status("OK", run_time)
                 return False
 
             # Step 2: Validate columns
             self.validate_required_columns(df)
 
             # Step 3: Filter data
-            self.logger.info("--> Applying filtering logic...")
+            self.logger.info("--> Applying filtering logic: df_filtered = self.filter_data(df)")
             df_filtered = self.filter_data(df)
-            self.logger.info(f"[OK] {len(df_filtered)} record(s) after filtering")
+            self.logger.info(f"[OK] len(df_filtered)={len(df_filtered)} record{'' if len(df_filtered)==1 else 's'} after filtering")
 
             if df_filtered.empty:
-                self.logger.info("No records after filtering")
+                self.logger.info("No records after filtering: df_filtered.empty == True")
+                self._write_health_status("OK", run_time)
                 return False
 
             # Step 4: Filter out already-sent events
@@ -181,22 +184,27 @@ class BaseAlert(ABC):
 
             if df_unsent.empty:
                 self.logger.info("All records have been sent previously. No new notifications.")
+                self._write_health_status("OK", run_time)
                 return False
 
-            self.logger.info(f"[OK] {len(df_unsent)} new record(s) to notify")
+            self.logger.info(f"[OK] len(df_unsent)={len(df_unsent)} new record{'' if len(df_unsent)==1 else 's'} to notify")
 
             # Step 5: Route to recipients
             self.logger.info("--> Routing notifications to recipients...")
             notification_jobs = self.route_notifications(df_unsent)
-            self.logger.info(f"[OK] Created {len(notification_jobs)} notification job(s)")
+            self.logger.info(f"[OK] Created len(notification_jobs)={len(notification_jobs)} notification job{'' if len(notification_jobs)==1 else 's'}")
 
             # Step 6: Send notifications
             success = self._send_notifications(notification_jobs, run_time)
+
+            # Step 7: Write health status
+            self._write_health_status("OK", run_time)
 
             return success
 
         except Exception as e:
             self.logger.exception(f"Error in {self.__class__.__name__}.run(): {e}")
+            self._write_health_status("ERROR", run_time, str(e))
             return False
         finally:
             self.logger.info(f"◼ {self.__class__.__name__} RUN COMPLETE")
@@ -226,12 +234,13 @@ class BaseAlert(ABC):
                 original_recipients = job['recipients']
                 original_cc_recipients = job.get('cc_recipients', [])
                 data = job['data']
+                self.logger.info(f"Trying to extract metadata")
                 metadata = job.get('metadata', {})
                 
                 # GENERATE FORMATTED EMAIL CONTENT
                 base_subject = self.get_subject_line(data, metadata)
                 plain_text = self.config.text_formatter.format(data, run_time, self.config, metadata)
-                html_content = self.config.html_formatter.format(data, run_time, self.config, metadata)
+                html_content = self.config.html_formatter.format(data, run_time, self.config, metadata, enable_links=self.config.enable_links)
                 
                 # Handle dry-run email redirection
                 if self.config.dry_run and self.config.dry_run_email:
@@ -291,3 +300,28 @@ class BaseAlert(ABC):
                 self.logger.info(f"[DRY-RUN] Would mark {len(sent_keys)} event(s) as sent (tracking disabled in dry-run)")
         
         return any_sent
+
+
+    def _write_health_status(self, status: str, run_time: datetime, error_msg: str = "") -> None:
+        """
+        Write health status to file for healthcheck monitoring.
+
+        Args:
+            status: "OK" or "ERROR"
+            run_time: Timestamp of this run
+            error_msg: Error message if status is ERROR
+        """
+        try:
+            health_file = Path("/app/logs/health_status.txt")
+            health_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(health_file, 'w') as f:
+                f.write(f"{status} {run_time.isoformat()}\n")
+                f.write(f"ALERT_TYPE: {self.__class__.__name__}\n")
+                f.write(f"TIMEZONE: {self.config.timezone}\n")
+                if error_msg:
+                    f.write(f"ERROR_MSG: {error_msg}\n")
+
+            self.logger.debug(f"Health status written: {status}")
+        except Exception as e:
+            self.logger.error(f"Failed to write health status: {e}")
