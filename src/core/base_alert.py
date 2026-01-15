@@ -240,7 +240,7 @@ class BaseAlert(ABC):
                 # GENERATE FORMATTED EMAIL CONTENT
                 base_subject = self.get_subject_line(data, metadata)
                 plain_text = self.config.text_formatter.format(data, run_time, self.config, metadata)
-                html_content = self.config.html_formatter.format(data, run_time, self.config, metadata, enable_links=self.config.enable_links)
+                html_content = self.config.html_formatter.format(data, run_time, self.config, metadata)
                 
                 # Handle dry-run email redirection
                 if self.config.dry_run and self.config.dry_run_email:
